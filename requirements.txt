@@ -1,0 +1,11 @@
+numpy
+pandas
+scipy
+scikit-bio
+pyyaml
+click
+biopython
+pydantic>=2.0
+plotly>=5.15
+rich
+litellm

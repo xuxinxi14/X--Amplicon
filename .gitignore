@@ -1,0 +1,50 @@
+# Secrets and local configuration
+.env
+*.env.local
+
+# Local Python environments and bundled runtimes
+.venv/
+.tools/
+.pip-tmp/
+.pip-work/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+*.egg-info/
+
+# X-Amplicon generated outputs and runtime state
+work/
+run_logs/
+analysis_report.md
+run_agent.bat
+run_process.bat
+
+# Local sequencing data and sample-specific metadata
+seq/
+metadata.txt
+
+# Large reference databases and external executables
+databas/
+bin/
+
+# Temporary test workspaces
+tests/tmp*/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+
+# Local notes
+启动命令.txt
