@@ -196,15 +196,40 @@ You: Summarize taxonomy at the Phylum level
 You: Run the full pipeline with metadata.txt and seq/ directory
 You: Generate all standard visualization charts for the completed run
 You: Plot alpha boxplots and beta PCoA from work/06_final
+You: Search the project files for run_summary and summarize the latest output
+You: Summarize recent agent tool traces
+You: Run the built-in agent evaluation cases
+You: Search PubMed for 16S microbiome benchmark papers
 ```
 
-### 6.7 文件结构
+### 6.7 Optional Agent skills
+
+Optional skills are loaded from `agent/skills/*/tools.py` and appear in `/tools`.
+The current skills are:
+
+| Skill | Purpose |
+| --- | --- |
+| `local_project_rag` | Search/read project files, inspect `run_summary.json`, list output artifacts, optionally preview LlamaIndex documents |
+| `agent_tracing` | Summarize and export tool-call traces from `run_logs/agent_tool_trace.jsonl` |
+| `agent_evaluation` | Run static registry/prompt checks and optional dependency checks |
+| `literature_evidence` | Search PubMed and fetch abstracts through Biopython Entrez |
+
+Install optional dependencies:
+
+```powershell
+& .\.tools\python-3.13.13-amd64\python.exe -m pip install -r requirements-skills.txt
+```
+
+For PubMed search, set `NCBI_EMAIL` in `.env`. `NCBI_API_KEY` is optional.
+
+### 6.8 文件结构
 
 ```text
 agent/
 ├── __init__.py   # package marker
 ├── config.py     # env / .env loader, AgentConfig, KNOWN_MODELS
 ├── tools.py      # tool registry + JSON schema + safe executor
+├── skills/       # optional read-only RAG, tracing, evaluation, literature tools
 ├── state.py      # JSON-backed conversation + result persistence
 └── agent.py      # Perception → Reasoning → Action → Observation loop
 agent_cli.py      # interactive CLI entry point

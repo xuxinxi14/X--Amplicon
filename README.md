@@ -9,7 +9,7 @@ The recommended entry point is `process.py run-pipeline-config`, with parameters
 All command examples assume you are running from the repository root directory:
 
 ```powershell
-cd D:\16s_translate\X-Amplicon
+cd X-Amplicon
 ```
 
 ## 1. Quick Start
@@ -32,10 +32,16 @@ If you need to export `png`, `pdf`, or `all` static plots, add `-InstallStaticEx
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -InstallStaticExport
 ```
 
+If you want to install optional Agent skill dependencies for PubMed search, LlamaIndex, evaluation, and tracing, add `-InstallSkillDeps`:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
+```
+
 ### 1.1 Check Configuration
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
+python process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
 This command only validates parameters, input paths, sample matching, and external executables — it does not start any time-consuming analysis.
@@ -43,7 +49,7 @@ This command only validates parameters, input paths, sample matching, and extern
 Equivalent pre-check entry point:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml --check-only
+python process.py run-pipeline-config --params pipeline_params.yaml --check-only
 ```
 
 `--dry-run` is an alias for `--check-only`.
@@ -51,7 +57,7 @@ Equivalent pre-check entry point:
 ### 1.2 Run the Full Pipeline
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml
+python process.py run-pipeline-config --params pipeline_params.yaml
 ```
 
 ### 1.3 Generate Standard Visualizations
@@ -59,7 +65,7 @@ Equivalent pre-check entry point:
 Run after the full pipeline completes:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format html
 ```
@@ -69,7 +75,7 @@ Plot output defaults to `work\06_final\plots\`, with each chart type placed in i
 ### 1.4 Launch the Agent
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
+python agent_cli.py
 ```
 
 Common interactive commands:
@@ -193,13 +199,13 @@ work/
 List all subcommands:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py --help
+python process.py --help
 ```
 
 View options for a specific subcommand:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity --help
+python process.py beta-diversity --help
 ```
 
 Each module below is described with: purpose, primary inputs, primary outputs, and terminal usage.
@@ -215,7 +221,7 @@ Primary outputs: Terminal validation report; no analysis results written.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config `
+python process.py check-pipeline-config `
   --params pipeline_params.yaml
 ```
 
@@ -230,14 +236,14 @@ Primary outputs: `output_root\06_final\` and `run_summary.json`
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
+python process.py run-pipeline-config `
   --params pipeline_params.yaml
 ```
 
 Check without running:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
+python process.py run-pipeline-config `
   --params pipeline_params.yaml `
   --check-only
 ```
@@ -253,7 +259,7 @@ Primary outputs: Complete staged output under `--output-root`.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline `
+python process.py run-pipeline `
   --metadata metadata.txt `
   --seq-dir seq `
   --output-root work `
@@ -280,7 +286,7 @@ Primary outputs: ASV/ZOTU FASTA and associated intermediate files.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py usearch-asv `
+python process.py usearch-asv `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --minsize 10 `
@@ -298,7 +304,7 @@ Primary outputs: OTU FASTA.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py usearch-otu `
+python process.py usearch-otu `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --minsize 10 `
@@ -316,7 +322,7 @@ Primary outputs: OTU FASTA.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-otu `
+python process.py vsearch-otu `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --identity 0.97 `
@@ -335,7 +341,7 @@ Primary outputs: Non-chimeric FASTA.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-uchime-ref `
+python process.py vsearch-uchime-ref `
   --input work\04_features\otus.fa `
   --output work\04_features `
   --reference-db databas\rdp_16s_v18.fa `
@@ -354,7 +360,7 @@ Primary outputs: OTU/ASV count table.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
+python process.py otutab `
   --input work\02_filtered\filtered.fa `
   --representatives work\04_features\otus.fa `
   --output work\05_raw_results `
@@ -365,7 +371,7 @@ Terminal usage:
 Using the VSEARCH backend:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
+python process.py otutab `
   --input work\02_filtered\filtered.fa `
   --representatives work\04_features\otus.fa `
   --output work\05_raw_results `
@@ -385,7 +391,7 @@ Primary outputs: `otus.sintax`.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-sintax `
+python process.py vsearch-sintax `
   --input work\04_features\otus.fa `
   --output work\05_raw_results `
   --database rdp_16s_v18 `
@@ -404,7 +410,7 @@ Primary outputs: Filtered `otutab.txt`, `otus.fa`, `otus.sintax`, feature ID lis
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab-filter `
+python process.py otutab-filter `
   --input work\05_raw_results\otutab.txt `
   --taxonomy work\05_raw_results\otus.sintax `
   --representatives work\04_features\otus.fa `
@@ -425,7 +431,7 @@ Primary outputs: Rarefied OTU table, alpha diversity table, and stats file.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab-rare `
+python process.py otutab-rare `
   --input work\06_final\otutab.txt `
   --depth 0 `
   --seed 1 `
@@ -445,7 +451,7 @@ Primary outputs: Alpha diversity TSV; optional rarefaction TSV.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
+python process.py alpha-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\alpha\alpha_diversity.tsv
 ```
@@ -453,7 +459,7 @@ Terminal usage:
 With rarefaction curve:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
+python process.py alpha-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\alpha\alpha_diversity.tsv `
   --rarefaction-output work\06_final\alpha\alpha_rarefaction.tsv `
@@ -473,7 +479,7 @@ Primary outputs: One or more distance matrix TSV files.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
+python process.py beta-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\beta `
   --metric braycurtis `
@@ -485,7 +491,7 @@ Terminal usage:
 Calculate UniFrac:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
+python process.py beta-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\beta `
   --metric unweighted_unifrac `
@@ -504,7 +510,7 @@ Primary outputs: `otus.tree`.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py phylogenetic-tree `
+python process.py phylogenetic-tree `
   --input work\06_final\otus.fa `
   --output work\06_final\otus.tree `
   --linkage max
@@ -521,7 +527,7 @@ Primary outputs: `taxonomy.tsv` and `taxonomy_summary\*.tsv`.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
+python process.py taxonomy-summary `
   --sintax work\06_final\otus.sintax `
   --otutab work\06_final\otutab.txt `
   --output work\06_final
@@ -530,7 +536,7 @@ Terminal usage:
 Summarize only selected ranks:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
+python process.py taxonomy-summary `
   --sintax work\06_final\otus.sintax `
   --otutab work\06_final\otutab.txt `
   --rank Phylum `
@@ -549,7 +555,7 @@ Primary outputs: Group abundance table.
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py feature-filter `
+python process.py feature-filter `
   --input work\06_final\otutab.txt `
   --metadata metadata.txt `
   --group-col Group `
@@ -570,7 +576,7 @@ Primary outputs: HTML/TSV/optional static plots organized by chart type under `p
 Terminal usage:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format html
 ```
@@ -578,7 +584,7 @@ Terminal usage:
 Specify output directory and selected metrics:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --metadata work\00_input\metadata.txt `
   --output-dir work\06_final\plots `
@@ -592,7 +598,7 @@ Specify output directory and selected metrics:
 Skip certain plots:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --skip-cpcoa `
   --skip-beta-stats
@@ -607,49 +613,49 @@ Skip certain plots:
 Alpha boxplots:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_boxplots; plot_alpha_boxplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_boxplots; plot_alpha_boxplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Alpha grouped barplots:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_barplots; plot_alpha_barplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_barplots; plot_alpha_barplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Alpha rarefaction curve:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_rarefaction_curve; plot_alpha_rarefaction_curve(alpha_rarefaction_path='work/06_final/alpha/alpha_rarefaction.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_rarefaction_curve; plot_alpha_rarefaction_curve(alpha_rarefaction_path='work/06_final/alpha/alpha_rarefaction.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta PCoA:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_pcoa; plot_beta_pcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_pcoa; plot_beta_pcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta C-PCoA:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_cpcoa; plot_beta_cpcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_cpcoa; plot_beta_cpcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta distance heatmaps and between-group statistics:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_heatmaps; plot_beta_heatmaps(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_heatmaps; plot_beta_heatmaps(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Taxonomy stacked bar charts:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_stacked_bars; plot_taxonomy_stacked_bars(taxonomy_summary_dir='work/06_final/taxonomy_summary', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_taxonomy import plot_taxonomy_stacked_bars; plot_taxonomy_stacked_bars(taxonomy_summary_dir='work/06_final/taxonomy_summary', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Taxonomy heatmaps:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_heatmaps; plot_taxonomy_heatmaps(taxonomy_summary_dir='work/06_final/taxonomy_summary', output_format='html')"
+python -c "from src.core.viz_taxonomy import plot_taxonomy_heatmaps; plot_taxonomy_heatmaps(taxonomy_summary_dir='work/06_final/taxonomy_summary', output_format='html')"
 ```
 
 ## 7. Agent Tools and Equivalent Terminal Commands
@@ -657,7 +663,7 @@ Taxonomy heatmaps:
 Agent tools are registered in `agent/tools.py`. To view current tools:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
+python agent_cli.py
 # then type /tools
 ```
 
@@ -703,10 +709,10 @@ Plot beta PCoA and taxonomy stacked bars from the completed run.
 
 ## 8. Dependencies
 
-It is recommended to use the Python interpreter bundled in the repository:
+Use Python 3.10+ from your active environment. The Windows setup script can also create a local `.venv` or use a bundled runtime when one is provided:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe --version
+python --version
 ```
 
 ### 8.1 Python Packages
@@ -731,13 +737,13 @@ Python packages required by the core pipeline, CLI, Agent, and visualization:
 Install common Agent and visualization dependencies:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install litellm rich plotly
+python -m pip install litellm rich plotly
 ```
 
 To export static plots:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
+python -m pip install kaleido
 ```
 
 A Conda environment file is available at `environment.yml`, which lists the main dependencies.
@@ -783,7 +789,7 @@ Common variables:
 Override model and endpoint on the command line:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py `
+python agent_cli.py `
   --model openai/qwen-max `
   --api-key sk-... `
   --api-base https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -792,12 +798,60 @@ Override model and endpoint on the command line:
 View built-in model examples:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py --list-models
+python agent_cli.py --list-models
 ```
 
-## 10. Troubleshooting
+## 10. Optional Agent Skills
 
-### 10.1 Check `run_summary.json` First
+X-Amplicon can automatically discover extension tools from `agent/skills/*/tools.py`. The current optional skills are:
+
+| Skill | Agent tools | Purpose |
+| --- | --- | --- |
+| `local_project_rag` | `search_project_files`, `read_project_file`, `read_analysis_summary`, `find_output_artifacts`, `preview_llama_index_documents` | Search README/manuscripts/parameter files, inspect `run_summary.json`, list output artifacts, and optionally preview LlamaIndex documents |
+| `agent_tracing` | `summarize_agent_traces`, `export_agent_traces` | Summarize and export Agent tool-call JSONL traces |
+| `agent_evaluation` | `list_agent_eval_cases`, `run_agent_eval_cases`, `inspect_optional_skill_dependencies` | Run static Agent checks and inspect optional dependency availability |
+| `literature_evidence` | `search_pubmed_literature`, `fetch_pubmed_abstracts` | Search PubMed through Biopython Entrez; requires network access and `NCBI_EMAIL` |
+
+Install optional skill dependencies:
+
+```powershell
+python -m pip install -r requirements-skills.txt
+```
+
+Or install them during first-time setup:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
+```
+
+PubMed search requires `NCBI_EMAIL` in `.env` or in the system environment:
+
+```env
+NCBI_EMAIL=your_email@example.com
+NCBI_API_KEY=optional-ncbi-api-key
+```
+
+List all registered tools:
+
+```powershell
+python agent_cli.py
+# Then enter /tools
+```
+
+Example natural-language requests:
+
+```text
+Search the project files for run_summary and summarize the latest output.
+Summarize recent agent tool traces.
+Run the built-in agent evaluation cases.
+Search PubMed for recent 16S microbiome benchmark papers.
+```
+
+Online literature retrieval is intended for source-backed background and references. It does not replace benchmark validation of the current project.
+
+## 11. Troubleshooting
+
+### 11.1 Check `run_summary.json` First
 
 After the full pipeline completes or fails, check this file first:
 
@@ -807,12 +861,12 @@ work\06_final\run_summary.json
 
 It is more suitable than scrolling terminal logs for automated reporting and debugging.
 
-### 10.2 USEARCH or VSEARCH Not Found
+### 11.2 USEARCH or VSEARCH Not Found
 
 First run:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
+python process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
 If the executable is reported as unavailable, set `usearch_path` and `vsearch_path` in `pipeline_params.yaml`, or pass them on the command line:
@@ -821,7 +875,7 @@ If the executable is reported as unavailable, set `usearch_path` and `vsearch_pa
 --usearch-path bin\windows\usearch.exe --vsearch-path bin\windows\vsearch.exe
 ```
 
-### 10.3 Sample Matching Failure
+### 11.3 Sample Matching Failure
 
 Check three things:
 
@@ -829,7 +883,7 @@ Check three things:
 - Whether `read1_suffix` and `read2_suffix` match the actual filenames.
 - Whether `seq_dir` points to the correct FASTQ directory.
 
-### 10.4 No UniFrac Output
+### 11.4 No UniFrac Output
 
 The full pipeline automatically generates `otus.tree` from `work\06_final\otus.fa`. If running `beta-diversity` standalone, you must explicitly provide:
 
@@ -837,25 +891,26 @@ The full pipeline automatically generates `otus.tree` from `work\06_final\otus.f
 --tree work\06_final\otus.tree
 ```
 
-### 10.5 No PNG/PDF Visualization Output
+### 11.5 No PNG/PDF Visualization Output
 
 The default `html` format requires no additional dependencies. For static plots, install:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
+python -m pip install kaleido
 ```
 
 Then run:
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format all
 ```
 
-### 10.6 When to Use the Agent vs. the CLI
+### 11.6 When to Use the Agent vs. the CLI
 
 - For stable reproduction or scripting: prefer `process.py`.
 - To let the system choose steps, interpret results, or automatically generate charts based on natural language: use `agent_cli.py`.
 - To verify everything is ready before a run: use `check-pipeline-config`.
 - To summarize a completed run: read `run_summary.json`, then run `visualization-suite` as needed.
+

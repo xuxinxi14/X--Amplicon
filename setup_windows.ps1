@@ -11,6 +11,7 @@
       - prefer the bundled .tools Python if present;
       - otherwise create and use a local .venv from an existing Python 3.10+;
       - install Python dependencies;
+      - optionally install Agent skill dependencies;
       - copy .env.example to .env when .env is missing;
       - check external binaries and reference databases;
       - create simple run_agent.bat and run_process.bat launchers.
@@ -23,6 +24,9 @@
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallStaticExport
+
+.EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
 #>
 
 [CmdletBinding()]
@@ -31,6 +35,7 @@ param(
     [string]$PipIndexUrl = "",
     [switch]$SkipDependencyInstall,
     [switch]$InstallStaticExport,
+    [switch]$InstallSkillDeps,
     [switch]$SkipConfigCheck,
     [switch]$NoLauncher
 )
@@ -188,6 +193,22 @@ function Install-Dependencies {
         Write-Step "Installing dependencies from requirements.txt"
         $installArgs = @("-m", "pip", "install") + $indexArgs + @("-r", $requirementsPath)
         Invoke-Checked -FilePath $PythonExe -Arguments $installArgs -FailureMessage "Dependency installation failed."
+        if ($InstallStaticExport) {
+            Write-Step "Installing optional static Plotly export dependency"
+            $staticInstallArgs = @("-m", "pip", "install") + $indexArgs + @("kaleido>=0.2.1")
+            Invoke-Checked -FilePath $PythonExe -Arguments $staticInstallArgs -FailureMessage "Optional static export dependency installation failed."
+        }
+        if ($InstallSkillDeps) {
+            $skillRequirementsPath = Join-Path $ProjectRoot "requirements-skills.txt"
+            if (Test-Path -LiteralPath $skillRequirementsPath) {
+                Write-Step "Installing optional Agent skill dependencies from requirements-skills.txt"
+                $skillInstallArgs = @("-m", "pip", "install") + $indexArgs + @("-r", $skillRequirementsPath)
+                Invoke-Checked -FilePath $PythonExe -Arguments $skillInstallArgs -FailureMessage "Optional Agent skill dependency installation failed."
+            }
+            else {
+                Write-Warn "requirements-skills.txt was not found; skipping optional Agent skill dependencies."
+            }
+        }
         return
     }
 
@@ -208,6 +229,16 @@ function Install-Dependencies {
 
     if ($InstallStaticExport) {
         $packages += "kaleido>=0.2.1"
+    }
+
+    if ($InstallSkillDeps) {
+        $packages += @(
+            "llama-index",
+            "deepeval",
+            "ragas",
+            "opentelemetry-api",
+            "opentelemetry-sdk"
+        )
     }
 
     $installArgs = @("-m", "pip", "install") + $indexArgs + $packages

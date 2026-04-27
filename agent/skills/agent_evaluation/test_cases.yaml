@@ -1,0 +1,35 @@
+cases:
+  - id: local_project_rag_tools_registered
+    description: Local project retrieval tools should be available to the agent.
+    expected_tools:
+      - search_project_files
+      - read_project_file
+      - read_analysis_summary
+      - find_output_artifacts
+      - preview_llama_index_documents
+  - id: tracing_tools_registered
+    description: Trace inspection tools should be available to the agent.
+    expected_tools:
+      - summarize_agent_traces
+      - export_agent_traces
+  - id: literature_tools_registered
+    description: PubMed literature tools should be available when online search is needed.
+    expected_tools:
+      - search_pubmed_literature
+      - fetch_pubmed_abstracts
+  - id: evaluation_tools_registered
+    description: Static evaluation tools should be available.
+    expected_tools:
+      - list_agent_eval_cases
+      - run_agent_eval_cases
+      - inspect_optional_skill_dependencies
+  - id: visualization_prompt_rule
+    description: The system prompt should tell the agent to use visualization suite after completed runs.
+    expected_prompt_terms:
+      - run_visualization_suite
+      - work/06_final/plots
+  - id: optional_path_prompt_rule
+    description: The system prompt should prevent placeholder optional paths.
+    expected_prompt_terms:
+      - optional file paths
+      - never send an empty

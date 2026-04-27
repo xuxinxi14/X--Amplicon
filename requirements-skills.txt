@@ -1,0 +1,10 @@
+# Optional Agent skills
+#
+# Install these only when you need literature retrieval, local RAG extensions,
+# agent evaluation, or OpenTelemetry-compatible tracing.
+biopython
+llama-index
+deepeval
+ragas
+opentelemetry-api
+opentelemetry-sdk

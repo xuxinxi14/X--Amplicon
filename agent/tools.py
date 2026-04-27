@@ -11,7 +11,10 @@ from __future__ import annotations
 import importlib
 import os
 import pkgutil
+import time
 import traceback
+import uuid
+from datetime import datetime, timezone
 from typing import Any, Callable
 
 # ---------------------------------------------------------------------------
@@ -54,6 +57,31 @@ def _load_visualization_tool_definitions() -> list[dict[str, Any]]:
             continue
 
         module = importlib.import_module(f"src.core.{module_name}")
+        module_definitions = getattr(module, "TOOL_DEFINITIONS", [])
+        if not isinstance(module_definitions, list):
+            continue
+        for definition in module_definitions:
+            if isinstance(definition, dict):
+                definitions.append(definition)
+
+    return definitions
+
+
+def _load_skill_tool_definitions() -> list[dict[str, Any]]:
+    """Discover tool definitions exported by agent.skills.*.tools modules."""
+
+    try:
+        import agent.skills as skills_package
+    except ModuleNotFoundError:
+        return []
+
+    definitions: list[dict[str, Any]] = []
+    for module_info in pkgutil.iter_modules(skills_package.__path__):
+        skill_name = module_info.name
+        try:
+            module = importlib.import_module(f"agent.skills.{skill_name}.tools")
+        except ModuleNotFoundError:
+            continue
         module_definitions = getattr(module, "TOOL_DEFINITIONS", [])
         if not isinstance(module_definitions, list):
             continue
@@ -879,6 +907,7 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
 ]
 
 _TOOL_DEFINITIONS.extend(_load_visualization_tool_definitions())
+_TOOL_DEFINITIONS.extend(_load_skill_tool_definitions())
 
 _SESSION_PIPELINE_DEFAULTS: dict[str, Any] = {}
 _OPTIONAL_PIPELINE_PATH_ARGUMENTS = {
@@ -1046,6 +1075,66 @@ def _format_missing_path_error(tool_name: str, exc: FileNotFoundError) -> str:
     )
 
 
+def _summarize_trace_value(value: Any, *, max_text: int = 500) -> Any:
+    """Return a compact JSON-friendly representation for trace logs."""
+
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value if len(value) <= max_text else value[: max_text - 3] + "..."
+    if isinstance(value, (list, tuple)):
+        items = [_summarize_trace_value(item, max_text=max_text) for item in value[:20]]
+        if len(value) > 20:
+            items.append(f"... {len(value) - 20} more items")
+        return items
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for index, (key, item) in enumerate(value.items()):
+            if index >= 30:
+                compact["..."] = f"{len(value) - 30} more keys"
+                break
+            compact[str(key)] = _summarize_trace_value(item, max_text=max_text)
+        return compact
+
+    text = repr(value)
+    return text if len(text) <= max_text else text[: max_text - 3] + "..."
+
+
+def _record_tool_trace(
+    *,
+    tool_name: str,
+    raw_arguments: dict[str, Any],
+    resolved_arguments: dict[str, Any] | None,
+    result: dict[str, Any],
+    start_time: float,
+) -> None:
+    """Write a best-effort trace event for a tool call."""
+
+    try:
+        from agent.skills.agent_tracing.tools import record_tool_trace_event
+    except Exception:  # noqa: BLE001
+        return
+
+    duration_seconds = time.perf_counter() - start_time
+    event = {
+        "event_id": uuid.uuid4().hex,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tool": tool_name,
+        "status": result.get("status", "unknown"),
+        "duration_seconds": round(duration_seconds, 6),
+        "arguments": _summarize_trace_value(raw_arguments),
+    }
+    if resolved_arguments is not None and resolved_arguments != raw_arguments:
+        event["resolved_arguments"] = _summarize_trace_value(resolved_arguments)
+    if result.get("status") == "error":
+        event["error"] = _summarize_trace_value(result.get("error"))
+
+    try:
+        record_tool_trace_event(event)
+    except Exception:  # noqa: BLE001
+        return
+
+
 def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Execute a registered tool by name and return a structured result.
 
@@ -1064,15 +1153,25 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         ``traceback`` holds the full stack trace for debugging.
     """
     tool_map = get_tool_map()
+    start_time = time.perf_counter()
+    resolved_arguments_for_trace: dict[str, Any] | None = None
 
     if name not in tool_map:
-        return {
+        result = {
             "status": "error",
             "error": (
                 f"Unknown tool '{name}'. "
                 f"Available tools: {sorted(tool_map.keys())}"
             ),
         }
+        _record_tool_trace(
+            tool_name=name,
+            raw_arguments=arguments,
+            resolved_arguments=None,
+            result=result,
+            start_time=start_time,
+        )
+        return result
 
     fn = tool_map[name]
     try:
@@ -1083,18 +1182,28 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             resolved_arguments = merged_arguments
         if name == "run_raw_amplicon_pipeline":
             resolved_arguments = _normalize_pipeline_arguments(resolved_arguments)
+        resolved_arguments_for_trace = dict(resolved_arguments)
 
         result = fn(**resolved_arguments)
-        return {"status": "ok", "result": result}
+        response = {"status": "ok", "result": result}
     except FileNotFoundError as exc:
-        return {
+        response = {
             "status": "error",
             "error": _format_missing_path_error(name, exc),
             "traceback": traceback.format_exc(),
         }
     except Exception as exc:  # noqa: BLE001
-        return {
+        response = {
             "status": "error",
             "error": f"Tool '{name}' raised {type(exc).__name__}: {exc}",
             "traceback": traceback.format_exc(),
         }
+
+    _record_tool_trace(
+        tool_name=name,
+        raw_arguments=arguments,
+        resolved_arguments=resolved_arguments_for_trace,
+        result=response,
+        start_time=start_time,
+    )
+    return response

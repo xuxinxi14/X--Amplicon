@@ -9,7 +9,7 @@ X-Amplicon 是一个面向 16S rRNA 扩增子双端测序数据的 Python 工作
 所有命令示例默认在仓库根目录运行：
 
 ```powershell
-cd D:\16s_translate\X-Amplicon
+cd X-Amplicon
 ```
 
 ## 1. 快速开始
@@ -32,10 +32,16 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -InstallStaticExport
 ```
 
+如果需要安装 PubMed 检索、LlamaIndex、Agent evaluation 和 tracing 等可选 Agent skill 依赖，加上 `-InstallSkillDeps`：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
+```
+
 ### 1.1 检查配置
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
+python process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
 这个命令只验证参数、输入路径、样本匹配和外部可执行文件，不启动耗时分析。
@@ -43,7 +49,7 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -In
 等价预检查入口：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml --check-only
+python process.py run-pipeline-config --params pipeline_params.yaml --check-only
 ```
 
 `--dry-run` 是 `--check-only` 的同义入口。
@@ -51,7 +57,7 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -In
 ### 1.2 运行完整流程
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml
+python process.py run-pipeline-config --params pipeline_params.yaml
 ```
 
 ### 1.3 生成标准可视化
@@ -59,7 +65,7 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -In
 完整流程完成后运行：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format html
 ```
@@ -69,7 +75,7 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -In
 ### 1.4 启动 Agent
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
+python agent_cli.py
 ```
 
 常用交互命令：
@@ -193,16 +199,16 @@ work/
 查看全部子命令：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py --help
+python process.py --help
 ```
 
 查看某个子命令参数：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity --help
+python process.py beta-diversity --help
 ```
 
-下面每个模块统一按"用途、主要输入、主要输出、终端用法"描述。
+下面每个模块统一按“用途、主要输入、主要输出、终端用法”描述。
 
 ### 5.1 `check-pipeline-config`
 
@@ -215,7 +221,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config `
+python process.py check-pipeline-config `
   --params pipeline_params.yaml
 ```
 
@@ -230,14 +236,14 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
+python process.py run-pipeline-config `
   --params pipeline_params.yaml
 ```
 
 只检查不运行：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
+python process.py run-pipeline-config `
   --params pipeline_params.yaml `
   --check-only
 ```
@@ -253,7 +259,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline `
+python process.py run-pipeline `
   --metadata metadata.txt `
   --seq-dir seq `
   --output-root work `
@@ -280,7 +286,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py usearch-asv `
+python process.py usearch-asv `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --minsize 10 `
@@ -298,7 +304,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py usearch-otu `
+python process.py usearch-otu `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --minsize 10 `
@@ -316,7 +322,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-otu `
+python process.py vsearch-otu `
   --input work\03_uniques\uniques.fa `
   --output work\04_features `
   --identity 0.97 `
@@ -335,7 +341,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-uchime-ref `
+python process.py vsearch-uchime-ref `
   --input work\04_features\otus.fa `
   --output work\04_features `
   --reference-db databas\rdp_16s_v18.fa `
@@ -354,7 +360,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
+python process.py otutab `
   --input work\02_filtered\filtered.fa `
   --representatives work\04_features\otus.fa `
   --output work\05_raw_results `
@@ -365,7 +371,7 @@ work/
 使用 VSEARCH 后端时：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
+python process.py otutab `
   --input work\02_filtered\filtered.fa `
   --representatives work\04_features\otus.fa `
   --output work\05_raw_results `
@@ -385,7 +391,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-sintax `
+python process.py vsearch-sintax `
   --input work\04_features\otus.fa `
   --output work\05_raw_results `
   --database rdp_16s_v18 `
@@ -404,7 +410,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab-filter `
+python process.py otutab-filter `
   --input work\05_raw_results\otutab.txt `
   --taxonomy work\05_raw_results\otus.sintax `
   --representatives work\04_features\otus.fa `
@@ -425,7 +431,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py otutab-rare `
+python process.py otutab-rare `
   --input work\06_final\otutab.txt `
   --depth 0 `
   --seed 1 `
@@ -445,7 +451,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
+python process.py alpha-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\alpha\alpha_diversity.tsv
 ```
@@ -453,7 +459,7 @@ work/
 带稀释曲线：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
+python process.py alpha-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\alpha\alpha_diversity.tsv `
   --rarefaction-output work\06_final\alpha\alpha_rarefaction.tsv `
@@ -473,7 +479,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
+python process.py beta-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\beta `
   --metric braycurtis `
@@ -485,7 +491,7 @@ work/
 计算 UniFrac：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
+python process.py beta-diversity `
   --input work\06_final\otutab.txt `
   --output work\06_final\beta `
   --metric unweighted_unifrac `
@@ -504,7 +510,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py phylogenetic-tree `
+python process.py phylogenetic-tree `
   --input work\06_final\otus.fa `
   --output work\06_final\otus.tree `
   --linkage max
@@ -521,7 +527,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
+python process.py taxonomy-summary `
   --sintax work\06_final\otus.sintax `
   --otutab work\06_final\otutab.txt `
   --output work\06_final
@@ -530,7 +536,7 @@ work/
 只汇总部分层级：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
+python process.py taxonomy-summary `
   --sintax work\06_final\otus.sintax `
   --otutab work\06_final\otutab.txt `
   --rank Phylum `
@@ -549,7 +555,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py feature-filter `
+python process.py feature-filter `
   --input work\06_final\otutab.txt `
   --metadata metadata.txt `
   --group-col Group `
@@ -570,7 +576,7 @@ work/
 终端用法：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format html
 ```
@@ -578,7 +584,7 @@ work/
 指定输出目录和部分指标：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --metadata work\00_input\metadata.txt `
   --output-dir work\06_final\plots `
@@ -592,7 +598,7 @@ work/
 跳过部分图表：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --skip-cpcoa `
   --skip-beta-stats
@@ -607,49 +613,49 @@ work/
 Alpha 箱线图：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_boxplots; plot_alpha_boxplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_boxplots; plot_alpha_boxplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Alpha 分组柱状图：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_barplots; plot_alpha_barplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_barplots; plot_alpha_barplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Alpha 稀释曲线：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_rarefaction_curve; plot_alpha_rarefaction_curve(alpha_rarefaction_path='work/06_final/alpha/alpha_rarefaction.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_alpha_diversity import plot_alpha_rarefaction_curve; plot_alpha_rarefaction_curve(alpha_rarefaction_path='work/06_final/alpha/alpha_rarefaction.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta PCoA：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_pcoa; plot_beta_pcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_pcoa; plot_beta_pcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta C-PCoA：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_cpcoa; plot_beta_cpcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_cpcoa; plot_beta_cpcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Beta 距离热图和组间统计：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_heatmaps; plot_beta_heatmaps(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_beta_diversity import plot_beta_heatmaps; plot_beta_heatmaps(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Taxonomy 堆叠柱状图：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_stacked_bars; plot_taxonomy_stacked_bars(taxonomy_summary_dir='work/06_final/taxonomy_summary', metadata_path='work/00_input/metadata.txt', output_format='html')"
+python -c "from src.core.viz_taxonomy import plot_taxonomy_stacked_bars; plot_taxonomy_stacked_bars(taxonomy_summary_dir='work/06_final/taxonomy_summary', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
 Taxonomy 热图：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_heatmaps; plot_taxonomy_heatmaps(taxonomy_summary_dir='work/06_final/taxonomy_summary', output_format='html')"
+python -c "from src.core.viz_taxonomy import plot_taxonomy_heatmaps; plot_taxonomy_heatmaps(taxonomy_summary_dir='work/06_final/taxonomy_summary', output_format='html')"
 ```
 
 ## 7. Agent 工具和终端等价入口
@@ -657,7 +663,7 @@ Taxonomy 热图：
 Agent 工具由 `agent/tools.py` 注册。查看当前工具：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
+python agent_cli.py
 # 进入后输入 /tools
 ```
 
@@ -703,10 +709,10 @@ Plot beta PCoA and taxonomy stacked bars from the completed run.
 
 ## 8. 依赖
 
-推荐优先使用仓库内 Python：
+请使用当前环境中的 Python 3.10+。Windows 初始化脚本也可以创建本地 `.venv`，或在提供 bundled runtime 时自动使用它：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe --version
+python --version
 ```
 
 ### 8.1 Python 包
@@ -731,13 +737,13 @@ Plot beta PCoA and taxonomy stacked bars from the completed run.
 安装 Agent 和可视化常用依赖：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install litellm rich plotly
+python -m pip install litellm rich plotly
 ```
 
 如需导出静态图：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
+python -m pip install kaleido
 ```
 
 Conda 环境文件在 `environment.yml`，其中已列出主要依赖。
@@ -783,7 +789,7 @@ copy .env.example .env
 命令行覆盖模型和端点：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py `
+python agent_cli.py `
   --model openai/qwen-max `
   --api-key sk-... `
   --api-base https://dashscope.aliyuncs.com/compatible-mode/v1
@@ -792,12 +798,60 @@ copy .env.example .env
 查看内置模型示例：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe agent_cli.py --list-models
+python agent_cli.py --list-models
 ```
 
-## 10. 常见问题和排错
+## 10. 可选 Agent skills
 
-### 10.1 先看 `run_summary.json`
+X-Amplicon 的 Agent 可以通过 `agent/skills/*/tools.py` 自动发现扩展工具。当前内置的可选 skills 包括：
+
+| Skill | Agent tools | 用途 |
+| --- | --- | --- |
+| `local_project_rag` | `search_project_files`, `read_project_file`, `read_analysis_summary`, `find_output_artifacts`, `preview_llama_index_documents` | 检索 README、论文草稿、参数文件、`run_summary.json` 和输出 artifacts；可选使用 LlamaIndex 预览 documents |
+| `agent_tracing` | `summarize_agent_traces`, `export_agent_traces` | 汇总和导出 Agent tool-call JSONL trace |
+| `agent_evaluation` | `list_agent_eval_cases`, `run_agent_eval_cases`, `inspect_optional_skill_dependencies` | 运行静态 Agent 能力检查，检查可选依赖是否安装 |
+| `literature_evidence` | `search_pubmed_literature`, `fetch_pubmed_abstracts` | 通过 Biopython Entrez 检索 PubMed 文献，需要联网和 `NCBI_EMAIL` |
+
+安装可选 skill 依赖：
+
+```powershell
+python -m pip install -r requirements-skills.txt
+```
+
+或者在首次初始化时安装：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
+```
+
+PubMed 文献检索需要在 `.env` 或系统环境变量中配置：
+
+```env
+NCBI_EMAIL=your_email@example.com
+NCBI_API_KEY=optional-ncbi-api-key
+```
+
+查看所有已注册工具：
+
+```powershell
+python agent_cli.py
+# 进入后输入 /tools
+```
+
+也可以通过自然语言调用这些 skills，例如：
+
+```text
+Search the project files for run_summary and summarize the latest output.
+Summarize recent agent tool traces.
+Run the built-in agent evaluation cases.
+Search PubMed for recent 16S microbiome benchmark papers.
+```
+
+Agent 的联网文献检索只用于提供来源支持的背景资料或参考文献，不应替代当前项目尚未完成的 benchmark 或生物学验证。
+
+## 11. 常见问题和排错
+
+### 11.1 先看 `run_summary.json`
 
 完整流程完成或失败后，优先检查：
 
@@ -807,12 +861,12 @@ work\06_final\run_summary.json
 
 它比终端滚动日志更适合作为自动报告和排错依据。
 
-### 10.2 找不到 USEARCH 或 VSEARCH
+### 11.2 找不到 USEARCH 或 VSEARCH
 
 先运行：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
+python process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
 如果提示可执行文件不可用，在 `pipeline_params.yaml` 中设置 `usearch_path`、`vsearch_path`，或在命令中传入：
@@ -821,7 +875,7 @@ work\06_final\run_summary.json
 --usearch-path bin\windows\usearch.exe --vsearch-path bin\windows\vsearch.exe
 ```
 
-### 10.3 样本匹配失败
+### 11.3 样本匹配失败
 
 检查三项：
 
@@ -829,7 +883,7 @@ work\06_final\run_summary.json
 - `read1_suffix`、`read2_suffix` 是否和文件名一致。
 - `seq_dir` 是否指向真正的 FASTQ 目录。
 
-### 10.4 UniFrac 没有输出
+### 11.4 UniFrac 没有输出
 
 完整流程会自动从 `work\06_final\otus.fa` 生成 `otus.tree`。如果单独运行 `beta-diversity`，需要显式传：
 
@@ -837,25 +891,26 @@ work\06_final\run_summary.json
 --tree work\06_final\otus.tree
 ```
 
-### 10.5 可视化没有 PNG/PDF
+### 11.5 可视化没有 PNG/PDF
 
 默认 `html` 不需要额外依赖。静态图需要：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
+python -m pip install kaleido
 ```
 
 然后运行：
 
 ```powershell
-& .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
+python process.py visualization-suite `
   --final-dir work\06_final `
   --format all
 ```
 
-### 10.6 什么时候用 Agent，什么时候用 CLI
+### 11.6 什么时候用 Agent，什么时候用 CLI
 
 - 想稳定复现或写脚本：优先用 `process.py`。
 - 想让系统根据自然语言选择步骤、解释结果或自动生成图表：用 `agent_cli.py`。
 - 想验证能否开跑：用 `check-pipeline-config`。
 - 想汇总已经完成的运行：读 `run_summary.json`，再按需运行 `visualization-suite`。
+
