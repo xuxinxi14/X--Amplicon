@@ -20,15 +20,19 @@ from .viz_common import (
     DEFAULT_ALPHA_BOXPLOT_DIR,
     DEFAULT_ALPHA_RAREFACTION_DIR,
     DEFAULT_ALPHA_METRICS,
+    apply_publication_theme,
     build_sample_metadata,
     ensure_output_dir,
     normalize_alpha_table,
     read_table,
+    resolve_color_palette,
     resolve_alpha_metrics,
+    sort_groups,
     validate_output_format,
+    write_chart_index,
     write_html_dashboard,
     write_html_figure,
-    write_static_figure,
+    write_optional_static,
     write_table,
 )
 
@@ -59,28 +63,6 @@ def _alpha_long_table(merged: pd.DataFrame, metrics: Sequence[str]) -> pd.DataFr
     )
 
 
-def _write_optional_static(
-    fig: Any,
-    base_path: str,
-    output_format: str,
-    width: int,
-    height: int,
-    generated_files: list[str],
-    skipped_static: list[str],
-) -> None:
-    if output_format not in {"png", "pdf", "all"}:
-        return
-    for suffix in ("png", "pdf"):
-        if output_format not in {suffix, "all"}:
-            continue
-        static_path = f"{base_path}.{suffix}"
-        written = write_static_figure(fig, static_path, width=width, height=height)
-        if written is None:
-            skipped_static.append(static_path)
-        else:
-            generated_files.append(written)
-
-
 def plot_alpha_boxplots(
     alpha_diversity_path: str = "work/06_final/alpha/alpha_diversity.tsv",
     metadata_path: str | None = "work/00_input/metadata.txt",
@@ -89,6 +71,7 @@ def plot_alpha_boxplots(
     sample_id_col: str = "SampleID",
     group_col: str = "Group",
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate alpha diversity boxplots grouped by metadata.
 
@@ -100,8 +83,9 @@ def plot_alpha_boxplots(
         metrics: Alpha metrics to plot. Defaults to all supported metrics.
         sample_id_col: Metadata column containing sample IDs.
         group_col: Metadata column containing group labels.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -130,7 +114,8 @@ def plot_alpha_boxplots(
     figures: dict[str, Any] = {}
     generated_files = [long_path]
     skipped_static: list[str] = []
-    group_order = list(dict.fromkeys(merged["Group"].astype(str).tolist()))
+    group_order = sort_groups(merged["Group"].astype(str).tolist())
+    color_map = resolve_color_palette(group_order, color_palette=color_palette)
 
     for metric in resolved_metrics:
         metric_table = long_table.loc[long_table["Metric"] == metric].copy()
@@ -142,13 +127,14 @@ def plot_alpha_boxplots(
             points="all",
             hover_data=["SampleID"],
             category_orders={"Group": group_order},
+            color_discrete_map=color_map,
             title=f"{metric} Alpha Diversity",
             labels={"Value": metric},
-            template="plotly_white",
             width=900,
             height=620,
         )
         fig.update_layout(showlegend=False, title_x=0.5)
+        apply_publication_theme(fig, width=900, height=620)
         figures[metric] = fig
 
         if output_format in {"html", "all"}:
@@ -158,7 +144,7 @@ def plot_alpha_boxplots(
                     os.path.join(resolved_output_dir, f"alpha_boxplot_{metric.lower()}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             fig,
             os.path.join(resolved_output_dir, f"alpha_boxplot_{metric.lower()}"),
             output_format,
@@ -176,6 +162,14 @@ def plot_alpha_boxplots(
                 "Alpha Diversity Boxplots",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Alpha Diversity Boxplots",
+            generated_files,
+            "Per-metric alpha diversity boxplots grouped by sample metadata.",
+        )
+    )
 
     return {
         "alpha_diversity": os.path.abspath(alpha_diversity_path),
@@ -196,6 +190,7 @@ def plot_alpha_barplots(
     sample_id_col: str = "SampleID",
     group_col: str = "Group",
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate group mean alpha diversity barplots with standard deviation.
 
@@ -207,8 +202,9 @@ def plot_alpha_barplots(
         metrics: Alpha metrics to plot. Defaults to all supported metrics.
         sample_id_col: Metadata column containing sample IDs.
         group_col: Metadata column containing group labels.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -227,7 +223,8 @@ def plot_alpha_barplots(
         sample_id_col=sample_id_col,
         group_col=group_col,
     )
-    group_order = list(dict.fromkeys(merged["Group"].astype(str).tolist()))
+    group_order = sort_groups(merged["Group"].astype(str).tolist())
+    color_map = resolve_color_palette(group_order, color_palette=color_palette)
     summary = (
         merged.groupby("Group", sort=False)[resolved_metrics]
         .agg(["mean", "std"])
@@ -263,13 +260,14 @@ def plot_alpha_barplots(
             color="Group",
             error_y="Std",
             category_orders={"Group": group_order},
+            color_discrete_map=color_map,
             title=f"{metric} Group Mean",
             labels={"Mean": metric},
-            template="plotly_white",
             width=900,
             height=620,
         )
         fig.update_layout(showlegend=False, title_x=0.5)
+        apply_publication_theme(fig, width=900, height=620)
         figures[metric] = fig
 
         if output_format in {"html", "all"}:
@@ -279,7 +277,7 @@ def plot_alpha_barplots(
                     os.path.join(resolved_output_dir, f"alpha_barplot_{metric.lower()}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             fig,
             os.path.join(resolved_output_dir, f"alpha_barplot_{metric.lower()}"),
             output_format,
@@ -297,6 +295,14 @@ def plot_alpha_barplots(
                 "Alpha Diversity Group Mean Barplots",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Alpha Diversity Group Mean Barplots",
+            generated_files,
+            "Group-level alpha diversity mean and standard deviation barplots.",
+        )
+    )
 
     return {
         "alpha_diversity": os.path.abspath(alpha_diversity_path),
@@ -316,6 +322,7 @@ def plot_alpha_rarefaction_curve(
     sample_id_col: str = "SampleID",
     group_col: str = "Group",
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate an observed richness rarefaction curve.
 
@@ -327,8 +334,9 @@ def plot_alpha_rarefaction_curve(
         output_dir: Directory for generated plots and tables.
         sample_id_col: Metadata column containing sample IDs.
         group_col: Metadata column containing group labels.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -364,6 +372,8 @@ def plot_alpha_rarefaction_curve(
         group_col=group_col,
     )
     long_table = long_table.merge(sample_meta, on="SampleID", how="left", validate="many_to_one")
+    group_order = sort_groups(long_table["Group"].astype(str).tolist())
+    color_map = resolve_color_palette(group_order, color_palette=color_palette)
     long_path = write_table(
         long_table,
         os.path.join(resolved_output_dir, "alpha_rarefaction_long.tsv"),
@@ -374,17 +384,19 @@ def plot_alpha_rarefaction_curve(
         long_table,
         x="Depth",
         y="Observed_OTUs",
-        color="SampleID",
+        color="Group",
         line_group="SampleID",
-        hover_data=["Group"],
+        hover_data=["SampleID"],
+        category_orders={"Group": group_order},
+        color_discrete_map=color_map,
         title="Alpha Rarefaction Curve",
         labels={"Observed_OTUs": "Observed OTUs"},
-        template="plotly_white",
         width=1050,
         height=650,
     )
     fig.update_traces(mode="lines", line_width=1.6)
     fig.update_layout(title_x=0.5, hovermode="x unified")
+    apply_publication_theme(fig, width=1050, height=650)
 
     generated_files = [long_path]
     skipped_static: list[str] = []
@@ -395,7 +407,7 @@ def plot_alpha_rarefaction_curve(
                 os.path.join(resolved_output_dir, "alpha_rarefaction_curve.html"),
             )
         )
-    _write_optional_static(
+    write_optional_static(
         fig,
         os.path.join(resolved_output_dir, "alpha_rarefaction_curve"),
         output_format,
@@ -403,6 +415,14 @@ def plot_alpha_rarefaction_curve(
         height=650,
         generated_files=generated_files,
         skipped_static=skipped_static,
+    )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Alpha Rarefaction Curve",
+            generated_files,
+            "Observed richness rarefaction curves colored by metadata group.",
+        )
     )
 
     return {
@@ -433,8 +453,12 @@ TOOL_DEFINITIONS = [
                 "group_col": {"type": "string", "default": "Group"},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },
@@ -457,8 +481,12 @@ TOOL_DEFINITIONS = [
                 "group_col": {"type": "string", "default": "Group"},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },
@@ -480,8 +508,12 @@ TOOL_DEFINITIONS = [
                 "group_col": {"type": "string", "default": "Group"},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },

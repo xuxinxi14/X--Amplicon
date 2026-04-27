@@ -11,6 +11,7 @@ else:
 
 import os
 import re
+from collections.abc import Mapping
 from typing import Any, Iterable, Sequence
 
 import numpy as np
@@ -26,7 +27,8 @@ DEFAULT_BETA_CPCOA_DIR = os.path.join(DEFAULT_PLOTS_DIR, "beta_cpcoa_chart")
 DEFAULT_BETA_HEATMAP_DIR = os.path.join(DEFAULT_PLOTS_DIR, "beta_heatmap_chart")
 DEFAULT_TAXONOMY_STACKED_BAR_DIR = os.path.join(DEFAULT_PLOTS_DIR, "taxonomy_stacked_bar_chart")
 DEFAULT_TAXONOMY_HEATMAP_DIR = os.path.join(DEFAULT_PLOTS_DIR, "taxonomy_heatmap_chart")
-VALID_OUTPUT_FORMATS = {"html", "png", "pdf", "all"}
+VALID_OUTPUT_FORMATS = {"html", "png", "pdf", "svg", "all"}
+STATIC_OUTPUT_FORMATS = ("png", "pdf", "svg")
 DEFAULT_TAXONOMY_LEVELS = (
     "kingdom",
     "phylum",
@@ -58,6 +60,28 @@ GROUP_COLORS = {
     "OE": "#F6BD16",
     "WT": "#5AD8A6",
 }
+DEFAULT_GROUP_ORDER = (
+    "WT",
+    "Control",
+    "CTRL",
+    "CON",
+    "CK",
+    "KO",
+    "OE",
+)
+PUBLICATION_FONT_FAMILY = "Arial, Helvetica, sans-serif"
+PUBLICATION_COLORWAY = (
+    "#4E79A7",
+    "#F28E2B",
+    "#59A14F",
+    "#E15759",
+    "#76B7B2",
+    "#EDC948",
+    "#B07AA1",
+    "#FF9DA7",
+    "#9C755F",
+    "#BAB0AC",
+)
 
 
 def ensure_output_dir(output_dir: str | None = None) -> str:
@@ -190,6 +214,39 @@ def write_static_figure(fig: Any, path: str, width: int, height: int, scale: flo
     return resolved_path
 
 
+def write_optional_static(
+    fig: Any,
+    base_path: str,
+    output_format: str,
+    width: int,
+    height: int,
+    generated_files: list[str],
+    skipped_static: list[str],
+    scale: float = 2.0,
+) -> None:
+    """Write requested Plotly static formats and track skipped kaleido exports."""
+
+    output_format = validate_output_format(output_format)
+    if output_format not in {*STATIC_OUTPUT_FORMATS, "all"}:
+        return
+
+    for suffix in STATIC_OUTPUT_FORMATS:
+        if output_format not in {suffix, "all"}:
+            continue
+        static_path = f"{base_path}.{suffix}"
+        written = write_static_figure(
+            fig,
+            static_path,
+            width=width,
+            height=height,
+            scale=scale,
+        )
+        if written is None:
+            skipped_static.append(static_path)
+        else:
+            generated_files.append(written)
+
+
 def write_html_dashboard(figures: dict[str, Any], path: str, title: str) -> str:
     """Write multiple Plotly figures to one offline tabbed HTML dashboard."""
 
@@ -284,6 +341,290 @@ def sanitize_id(text: str) -> str:
     """Convert text to a safe id or filename fragment."""
 
     return re.sub(r"[^A-Za-z0-9_-]+", "_", str(text)).strip("_") or "item"
+
+
+def natural_sort_key(text: str) -> tuple[Any, ...]:
+    """Return a natural-sort key that keeps numeric suffixes in numeric order."""
+
+    parts = re.split(r"(\d+)", str(text))
+    key: list[Any] = []
+    for part in parts:
+        if part.isdigit():
+            key.append(int(part))
+        else:
+            key.append(part.casefold())
+    return tuple(key)
+
+
+def sort_groups(
+    groups: Iterable[str],
+    preferred_order: Sequence[str] | None = DEFAULT_GROUP_ORDER,
+) -> list[str]:
+    """Return stable, publication-friendly group order for legends and axes."""
+
+    unique_groups = list(dict.fromkeys(str(group) for group in groups if str(group).strip()))
+    preferred = {
+        str(group).casefold(): index
+        for index, group in enumerate(preferred_order or ())
+    }
+
+    def _key(group: str) -> tuple[int, int, tuple[Any, ...]]:
+        rank = preferred.get(group.casefold())
+        if rank is None:
+            return 1, len(preferred), natural_sort_key(group)
+        return 0, rank, natural_sort_key(group)
+
+    return sorted(unique_groups, key=_key)
+
+
+def sort_samples_by_metadata(
+    sample_ids: Iterable[str],
+    sample_metadata: pd.DataFrame | None = None,
+) -> list[str]:
+    """Sort samples by metadata group order and natural sample ID order."""
+
+    sample_list = [str(sample_id) for sample_id in sample_ids]
+    if sample_metadata is None or sample_metadata.empty:
+        return sort_sample_ids(sample_list)
+
+    metadata = sample_metadata.copy()
+    if "SampleID" not in metadata.columns or "Group" not in metadata.columns:
+        return sort_sample_ids(sample_list)
+    metadata = metadata.set_index("SampleID", drop=False)
+    group_map = {
+        str(sample_id): str(metadata.loc[sample_id, "Group"])
+        for sample_id in sample_list
+        if sample_id in metadata.index
+    }
+    group_order = sort_groups(group_map.values())
+    group_rank = {group: index for index, group in enumerate(group_order)}
+
+    def _key(sample_id: str) -> tuple[int, tuple[Any, ...]]:
+        group = group_map.get(sample_id, infer_group(sample_id))
+        return group_rank.get(group, len(group_rank)), natural_sort_key(sample_id)
+
+    return sorted(sample_list, key=_key)
+
+
+def parse_color_palette(
+    color_palette: str | Sequence[str] | Mapping[str, str] | None,
+) -> tuple[dict[str, str], list[str]]:
+    """Parse a user palette into named color overrides and sequential colors."""
+
+    if color_palette is None:
+        return {}, []
+    if isinstance(color_palette, Mapping):
+        return {
+            str(key).strip(): str(value).strip()
+            for key, value in color_palette.items()
+            if str(key).strip() and str(value).strip()
+        }, []
+    if isinstance(color_palette, str):
+        tokens = [
+            token.strip()
+            for token in re.split(r"[,;\n]+", color_palette)
+            if token.strip()
+        ]
+    else:
+        tokens = [str(token).strip() for token in color_palette if str(token).strip()]
+
+    named: dict[str, str] = {}
+    sequential: list[str] = []
+    for token in tokens:
+        if ":" in token and not token.startswith("#"):
+            key, value = token.split(":", 1)
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                named[key] = value
+        else:
+            sequential.append(token)
+    return named, sequential
+
+
+def resolve_color_palette(
+    values: Iterable[str],
+    color_palette: str | Sequence[str] | Mapping[str, str] | None = None,
+    default_mapping: Mapping[str, str] | None = GROUP_COLORS,
+    sort_values: bool = True,
+) -> dict[str, str]:
+    """Resolve colors for group or taxon names with optional user overrides."""
+
+    ordered_values = (
+        sort_groups(values)
+        if sort_values
+        else list(dict.fromkeys(str(value) for value in values))
+    )
+    named, sequential = parse_color_palette(color_palette)
+    fallback = plotly_palette()
+    defaults = {str(key): str(value) for key, value in (default_mapping or {}).items()}
+    colors: dict[str, str] = {}
+
+    for index, value in enumerate(ordered_values):
+        text = str(value)
+        if text in named:
+            colors[text] = named[text]
+        elif sequential:
+            colors[text] = sequential[index % len(sequential)]
+        elif text in defaults:
+            colors[text] = defaults[text]
+        else:
+            colors[text] = fallback[index % len(fallback)]
+    return colors
+
+
+def apply_publication_theme(
+    fig: Any,
+    width: int | None = None,
+    height: int | None = None,
+) -> Any:
+    """Apply the shared X-Amplicon publication-style Plotly theme."""
+
+    layout_updates: dict[str, Any] = {
+        "template": "plotly_white",
+        "font": {
+            "family": PUBLICATION_FONT_FAMILY,
+            "size": 14,
+            "color": "#202733",
+        },
+        "title": {
+            "font": {"family": PUBLICATION_FONT_FAMILY, "size": 21, "color": "#202733"},
+            "x": 0.5,
+            "xanchor": "center",
+        },
+        "paper_bgcolor": "#ffffff",
+        "plot_bgcolor": "#ffffff",
+        "colorway": list(PUBLICATION_COLORWAY),
+        "legend": {
+            "bgcolor": "rgba(255,255,255,0.88)",
+            "bordercolor": "#D8DEE6",
+            "borderwidth": 1,
+            "font": {"family": PUBLICATION_FONT_FAMILY, "size": 12},
+        },
+        "hoverlabel": {
+            "font": {"family": PUBLICATION_FONT_FAMILY, "size": 12},
+            "bgcolor": "#ffffff",
+        },
+    }
+    if width is not None:
+        layout_updates["width"] = int(width)
+    if height is not None:
+        layout_updates["height"] = int(height)
+    fig.update_layout(**layout_updates)
+    fig.update_xaxes(
+        showline=True,
+        linewidth=1,
+        linecolor="#30343B",
+        mirror=True,
+        ticks="outside",
+        tickcolor="#30343B",
+        gridcolor="#E7EBF0",
+        zerolinecolor="#B8C0CC",
+        title_font={"family": PUBLICATION_FONT_FAMILY, "size": 14},
+        tickfont={"family": PUBLICATION_FONT_FAMILY, "size": 12},
+    )
+    fig.update_yaxes(
+        showline=True,
+        linewidth=1,
+        linecolor="#30343B",
+        mirror=True,
+        ticks="outside",
+        tickcolor="#30343B",
+        gridcolor="#E7EBF0",
+        zerolinecolor="#B8C0CC",
+        title_font={"family": PUBLICATION_FONT_FAMILY, "size": 14},
+        tickfont={"family": PUBLICATION_FONT_FAMILY, "size": 12},
+    )
+    return fig
+
+
+def write_chart_index(
+    output_dir: str,
+    title: str,
+    generated_files: Sequence[str],
+    description: str | None = None,
+) -> str:
+    """Write a lightweight HTML index for one chart directory."""
+
+    import html
+
+    resolved_output_dir = ensure_output_dir(output_dir)
+    rows: list[str] = []
+    for path in generated_files:
+        resolved_path = os.path.abspath(str(path))
+        if not os.path.isfile(resolved_path):
+            continue
+        try:
+            relative_path = os.path.relpath(resolved_path, resolved_output_dir)
+        except ValueError:
+            relative_path = resolved_path
+        href_path = relative_path.replace(os.sep, "/")
+        suffix = os.path.splitext(resolved_path)[1].lstrip(".").upper() or "FILE"
+        size_kb = os.path.getsize(resolved_path) / 1024.0
+        rows.append(
+            "<tr>"
+            f"<td>{html.escape(suffix)}</td>"
+            f'<td><a href="{html.escape(href_path)}">{html.escape(relative_path)}</a></td>'
+            f"<td>{size_kb:.1f} KB</td>"
+            "</tr>"
+        )
+
+    if not rows:
+        rows.append('<tr><td colspan="3">No generated files are available.</td></tr>')
+
+    description_html = (
+        f"<p>{html.escape(description)}</p>"
+        if description
+        else ""
+    )
+    page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{html.escape(title)}</title>
+  <style>
+    body {{
+      margin: 0;
+      padding: 24px 28px 34px;
+      font-family: {PUBLICATION_FONT_FAMILY};
+      color: #202733;
+      background: #ffffff;
+    }}
+    h1 {{ margin: 0 0 8px; font-size: 25px; font-weight: 650; }}
+    p {{ margin: 0 0 18px; color: #4B5563; max-width: 920px; }}
+    table {{ border-collapse: collapse; width: 100%; max-width: 1120px; }}
+    th, td {{ border-bottom: 1px solid #E5E7EB; padding: 10px 12px; text-align: left; }}
+    th {{ background: #F6F7F9; color: #202733; font-weight: 650; }}
+    td:first-child {{ width: 90px; color: #59636E; font-weight: 650; }}
+    td:last-child {{ width: 110px; color: #59636E; }}
+    a {{ color: #2F6B9A; text-decoration: none; }}
+    a:hover {{ text-decoration: underline; }}
+  </style>
+</head>
+<body>
+  <h1>{html.escape(title)}</h1>
+  {description_html}
+  <table>
+    <thead><tr><th>Type</th><th>File</th><th>Size</th></tr></thead>
+    <tbody>{''.join(rows)}</tbody>
+  </table>
+</body>
+</html>
+"""
+    return write_text_file(os.path.join(resolved_output_dir, "index.html"), page)
+
+
+def write_text_file(path: str, content: str) -> str:
+    """Write UTF-8 text and return the absolute path."""
+
+    resolved_path = os.path.abspath(path)
+    parent_dir = os.path.dirname(resolved_path)
+    if parent_dir:
+        os.makedirs(parent_dir, exist_ok=True)
+    with open(resolved_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(content)
+    return resolved_path
 
 
 def infer_group(sample_id: str) -> str:

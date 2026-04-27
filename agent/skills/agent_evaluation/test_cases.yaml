@@ -23,6 +23,8 @@ cases:
       - list_agent_eval_cases
       - run_agent_eval_cases
       - inspect_optional_skill_dependencies
+      - summarize_agent_evaluation_log
+      - export_agent_evaluation_log
   - id: visualization_prompt_rule
     description: The system prompt should tell the agent to use visualization suite after completed runs.
     expected_prompt_terms:

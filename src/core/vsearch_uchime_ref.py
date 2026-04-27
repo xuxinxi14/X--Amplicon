@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 
 from src.utils.command_runner import run_command
 
+from .database_registry import resolve_database_record
 from .workflow_common import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_VSEARCH_WINDOWS_PATH,
@@ -102,11 +103,20 @@ def _resolve_reference_db(
     else:
         resolved_reference_db = reference_db
 
-    absolute_reference_db = os.path.abspath(resolved_reference_db)
-    if not os.path.isfile(absolute_reference_db):
-        raise FileNotFoundError(
-            f"Reference database file not found: {absolute_reference_db}"
+    try:
+        database_record = resolve_database_record(
+            str(resolved_reference_db),
+            require_exists=True,
+            include_hash=False,
         )
+    except KeyError:
+        absolute_reference_db = os.path.abspath(str(resolved_reference_db))
+        if not os.path.isfile(absolute_reference_db):
+            raise FileNotFoundError(
+                f"Reference database file not found: {absolute_reference_db}"
+            )
+    else:
+        absolute_reference_db = str(database_record["path"])
 
     return absolute_reference_db
 

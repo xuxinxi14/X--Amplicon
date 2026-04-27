@@ -25,29 +25,28 @@ from .viz_common import (
     DEFAULT_BETA_CPCOA_DIR,
     DEFAULT_BETA_HEATMAP_DIR,
     DEFAULT_BETA_PCOA_DIR,
-    GROUP_COLORS,
+    apply_publication_theme,
     build_sample_metadata,
     ensure_output_dir,
     find_beta_distance_files,
     normalize_metric_title,
-    plotly_palette,
     read_distance_matrix,
-    sanitize_id,
+    resolve_color_palette,
+    sort_groups,
     validate_output_format,
+    write_chart_index,
     write_html_dashboard,
     write_html_figure,
-    write_static_figure,
+    write_optional_static,
     write_table,
 )
 
 
-def _generate_group_colors(groups: Sequence[str]) -> dict[str, str]:
-    colors = dict(GROUP_COLORS)
-    palette = plotly_palette()
-    for group in dict.fromkeys(str(group) for group in groups):
-        if group not in colors:
-            colors[group] = palette[len(colors) % len(palette)]
-    return colors
+def _generate_group_colors(
+    groups: Sequence[str],
+    color_palette: str | Sequence[str] | dict[str, str] | None = None,
+) -> dict[str, str]:
+    return resolve_color_palette(groups, color_palette=color_palette)
 
 
 def _pcoa(distance_matrix: pd.DataFrame, n_components: int = 2) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
@@ -122,10 +121,15 @@ def _build_ordination_figure(
     title: str,
     show_labels: bool,
     ellipse_confidence: float,
+    color_palette: str | Sequence[str] | dict[str, str] | None = None,
 ) -> go.Figure:
-    group_colors = _generate_group_colors(plot_df["Group"].astype(str).tolist())
+    group_order = sort_groups(plot_df["Group"].astype(str).tolist())
+    group_colors = _generate_group_colors(group_order, color_palette=color_palette)
     fig = go.Figure()
-    for group, group_df in plot_df.groupby("Group", sort=False):
+    for group in group_order:
+        group_df = plot_df.loc[plot_df["Group"].astype(str) == group].copy()
+        if group_df.empty:
+            continue
         color = group_colors[str(group)]
         fig.add_trace(
             go.Scatter(
@@ -151,38 +155,16 @@ def _build_ordination_figure(
 
     fig.update_layout(
         title={"text": title, "x": 0.5},
-        template="plotly_white",
         width=900,
         height=650,
         legend_title_text="Group",
         xaxis_title=f"{axis_prefix}1 ({axis_percent[0]:.2f}%)",
         yaxis_title=f"{axis_prefix}2 ({axis_percent[1]:.2f}%)",
     )
+    apply_publication_theme(fig, width=900, height=650)
     fig.add_hline(y=0, line_width=1, line_dash="dash", line_color="#d0d0d0")
     fig.add_vline(x=0, line_width=1, line_dash="dash", line_color="#d0d0d0")
     return fig
-
-
-def _write_optional_static(
-    fig: Any,
-    base_path: str,
-    output_format: str,
-    width: int,
-    height: int,
-    generated_files: list[str],
-    skipped_static: list[str],
-) -> None:
-    if output_format not in {"png", "pdf", "all"}:
-        return
-    for suffix in ("png", "pdf"):
-        if output_format not in {suffix, "all"}:
-            continue
-        static_path = f"{base_path}.{suffix}"
-        written = write_static_figure(fig, static_path, width=width, height=height)
-        if written is None:
-            skipped_static.append(static_path)
-        else:
-            generated_files.append(written)
 
 
 def plot_beta_pcoa(
@@ -195,6 +177,7 @@ def plot_beta_pcoa(
     show_labels: bool = False,
     ellipse_confidence: float = 0.95,
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate beta diversity PCoA scatter plots.
 
@@ -208,8 +191,9 @@ def plot_beta_pcoa(
         group_col: Metadata column containing group labels.
         show_labels: Whether to draw sample IDs next to points.
         ellipse_confidence: Confidence level for group ellipses.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -255,6 +239,7 @@ def plot_beta_pcoa(
             title=title,
             show_labels=show_labels,
             ellipse_confidence=float(ellipse_confidence),
+            color_palette=color_palette,
         )
         figures[normalize_metric_title(metric)] = fig
 
@@ -265,7 +250,7 @@ def plot_beta_pcoa(
                     os.path.join(resolved_output_dir, f"beta_pcoa_{metric}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             fig,
             os.path.join(resolved_output_dir, f"beta_pcoa_{metric}"),
             output_format,
@@ -290,6 +275,14 @@ def plot_beta_pcoa(
                 "Beta Diversity PCoA",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Beta Diversity PCoA",
+            generated_files,
+            "PCoA ordination plots and coordinate tables for beta distance matrices.",
+        )
+    )
 
     return {
         "beta_dir": os.path.abspath(beta_dir),
@@ -406,6 +399,7 @@ def plot_beta_cpcoa(
     show_labels: bool = False,
     ellipse_confidence: float = 0.68,
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate constrained PCoA plots grouped by metadata.
 
@@ -420,8 +414,9 @@ def plot_beta_cpcoa(
         random_seed: Random seed for permutations.
         show_labels: Whether to draw sample IDs next to points.
         ellipse_confidence: Confidence level for group ellipses.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -486,6 +481,7 @@ def plot_beta_cpcoa(
             title=title,
             show_labels=show_labels,
             ellipse_confidence=float(ellipse_confidence),
+            color_palette=color_palette,
         )
         figures[normalize_metric_title(metric)] = fig
 
@@ -496,7 +492,7 @@ def plot_beta_cpcoa(
                     os.path.join(resolved_output_dir, f"beta_cpcoa_{metric}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             fig,
             os.path.join(resolved_output_dir, f"beta_cpcoa_{metric}"),
             output_format,
@@ -526,6 +522,14 @@ def plot_beta_cpcoa(
                 "Beta Diversity CPCoA",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Beta Diversity CPCoA",
+            generated_files,
+            "Constrained ordination plots, coordinates, and pseudo-F statistics.",
+        )
+    )
 
     return {
         "beta_dir": os.path.abspath(beta_dir),
@@ -656,13 +660,14 @@ def _build_beta_heatmap(
     cluster_samples: bool,
     permanova: dict[str, Any],
     anosim: dict[str, Any],
+    color_palette: str | Sequence[str] | dict[str, str] | None = None,
 ) -> go.Figure:
     order = _cluster_order(distance_matrix, cluster_samples)
     ordered_samples = [distance_matrix.index[index] for index in order]
     ordered = distance_matrix.loc[ordered_samples, ordered_samples]
     groups = sample_meta.set_index("SampleID").loc[ordered_samples, "Group"].astype(str).tolist()
-    group_colors = _generate_group_colors(groups)
-    group_order = list(dict.fromkeys(groups))
+    group_order = sort_groups(groups)
+    group_colors = _generate_group_colors(group_order, color_palette=color_palette)
     group_codes = [[group_order.index(group) for group in groups]]
     group_scale = _discrete_colorscale([group_colors[group] for group in group_order])
 
@@ -734,12 +739,12 @@ def _build_beta_heatmap(
     )
     fig.update_layout(
         title={"text": f"Beta Distance Heatmap - {normalize_metric_title(metric)}<br><sup>{stats_text}</sup>", "x": 0.5},
-        template="plotly_white",
         width=980,
         height=860,
         legend_title_text="Group",
         margin={"l": 80, "r": 120, "t": 90, "b": 90},
     )
+    apply_publication_theme(fig, width=980, height=860)
     fig.update_xaxes(tickangle=90, row=2, col=1)
     fig.update_yaxes(autorange="reversed", row=2, col=1)
     return fig
@@ -793,13 +798,13 @@ def _build_within_between_boxplot(pair_df: pd.DataFrame, metric: str) -> go.Figu
         )
     fig.update_layout(
         title={"text": f"Within/Between Group Distances - {normalize_metric_title(metric)}", "x": 0.5},
-        template="plotly_white",
         width=980,
         height=560,
         xaxis_title="Group pair",
         yaxis_title="Distance",
         boxmode="group",
     )
+    apply_publication_theme(fig, width=980, height=560)
     return fig
 
 
@@ -814,6 +819,7 @@ def plot_beta_heatmaps(
     random_seed: int = 20260425,
     cluster_samples: bool = True,
     output_format: str = "html",
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate beta distance heatmaps and within/between group boxplots.
 
@@ -828,8 +834,9 @@ def plot_beta_heatmaps(
         permutations: Permutation count for PERMANOVA/ANOSIM.
         random_seed: Random seed for fallback permutation tests.
         cluster_samples: Whether to cluster sample order in heatmaps.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -872,6 +879,7 @@ def plot_beta_heatmaps(
             cluster_samples=cluster_samples,
             permanova=permanova,
             anosim=anosim,
+            color_palette=color_palette,
         )
         heatmap_figures[normalize_metric_title(metric)] = heatmap
         if output_format in {"html", "all"}:
@@ -881,7 +889,7 @@ def plot_beta_heatmaps(
                     os.path.join(resolved_output_dir, f"beta_heatmap_{metric}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             heatmap,
             os.path.join(resolved_output_dir, f"beta_heatmap_{metric}"),
             output_format,
@@ -901,7 +909,7 @@ def plot_beta_heatmaps(
                     os.path.join(resolved_output_dir, f"beta_within_between_boxplot_{metric}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             boxplot,
             os.path.join(resolved_output_dir, f"beta_within_between_boxplot_{metric}"),
             output_format,
@@ -931,6 +939,14 @@ def plot_beta_heatmaps(
                 "Beta Diversity Distance Heatmaps",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Beta Diversity Distance Heatmaps",
+            generated_files,
+            "Distance heatmaps, PERMANOVA/ANOSIM summaries, and within/between distance plots.",
+        )
+    )
 
     return {
         "beta_dir": os.path.abspath(beta_dir),
@@ -964,8 +980,12 @@ TOOL_DEFINITIONS = [
                 "ellipse_confidence": {"type": "number", "default": 0.95},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },
@@ -992,8 +1012,12 @@ TOOL_DEFINITIONS = [
                 "ellipse_confidence": {"type": "number", "default": 0.68},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },
@@ -1019,8 +1043,12 @@ TOOL_DEFINITIONS = [
                 "cluster_samples": {"type": "boolean", "default": True},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
                 },
             },
         },

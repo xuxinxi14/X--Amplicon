@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import unittest
 from pathlib import Path
 from shutil import rmtree
@@ -13,6 +14,7 @@ from uuid import uuid4
 import pandas as pd
 from click.testing import CliRunner
 
+from agent.evaluation_logger import append_evaluation_event
 from process import cli
 
 
@@ -203,6 +205,41 @@ class ProcessCliTests(unittest.TestCase):
         finally:
             rmtree(temp_path, ignore_errors=True)
 
+    def test_agent_evaluation_log_command_summarizes_and_exports(self) -> None:
+        temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            log_path = temp_path / "agent_evaluation_log.jsonl"
+            export_path = temp_path / "agent_evaluation_log_export.json"
+            append_evaluation_event(
+                {
+                    "event_id": "task-1",
+                    "event_type": "user_task",
+                    "status": "success",
+                    "duration_seconds": 0.1,
+                },
+                log_path=str(log_path),
+            )
+
+            result = self.runner.invoke(
+                cli,
+                [
+                    "agent-evaluation-log",
+                    "--log-path",
+                    str(log_path),
+                    "--export-json",
+                    str(export_path),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertIn("Events: 1", result.output)
+            self.assertTrue(export_path.is_file())
+            payload = json.loads(export_path.read_text(encoding="utf-8"))
+            self.assertEqual(payload["event_count"], 1)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
     def test_beta_diversity_command_accepts_cityblock_alias_and_writes_manhattan(self) -> None:
         temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
         temp_path.mkdir(parents=True, exist_ok=True)
@@ -298,6 +335,7 @@ class ProcessCliTests(unittest.TestCase):
             self.assertEqual(result.exit_code, 0, msg=result.output)
             self.assertIn("Pipeline config check: PASSED", result.output)
             self.assertIn("Planned run summary", result.output)
+            self.assertIn("Planned provenance JSON", result.output)
             self.assertIn("Planned rarefied OTU table", result.output)
             self.assertIn("Planned alpha rarefaction", result.output)
         finally:
@@ -427,6 +465,119 @@ class ProcessCliTests(unittest.TestCase):
             self.assertFalse((output_root / "06_final" / "run_summary.json").exists())
         finally:
             rmtree(temp_path, ignore_errors=True)
+
+    def test_write_provenance_command_updates_existing_summary(self) -> None:
+        temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            final_dir = temp_path / "work" / "06_final"
+            final_dir.mkdir(parents=True, exist_ok=True)
+            output_table = final_dir / "otutab.txt"
+            output_table.write_text("#OTUID\tS1\nOTU1\t1\n", encoding="utf-8")
+            summary_path = final_dir / "run_summary.json"
+            summary_path.write_text(
+                (
+                    "{\n"
+                    '  "status": "success",\n'
+                    '  "started_at": "2026-01-01T00:00:00+00:00",\n'
+                    '  "completed_at": "2026-01-01T00:00:01+00:00",\n'
+                    '  "effective_params": {"output_root": "work"},\n'
+                    f'  "outputs": {{"final_outputs": {{"feature_table": "{output_table.as_posix()}"}}}},\n'
+                    '  "steps": []\n'
+                    "}\n"
+                ),
+                encoding="utf-8",
+            )
+
+            result = self.runner.invoke(
+                cli,
+                [
+                    "write-provenance",
+                    "--summary",
+                    str(summary_path),
+                ],
+            )
+
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertTrue((final_dir / "provenance.json").is_file())
+            self.assertTrue((final_dir / "provenance.md").is_file())
+            updated_summary = json.loads(summary_path.read_text(encoding="utf-8"))
+            self.assertIn("provenance", updated_summary)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
+    def test_database_registry_commands(self) -> None:
+        temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            fasta_path = temp_path / "custom.fa"
+            fasta_path.write_text(">OTU1\nACGT\n", encoding="utf-8")
+            registry_path = temp_path / "databases.yaml"
+
+            register_result = self.runner.invoke(
+                cli,
+                [
+                    "register-database",
+                    "--name",
+                    "custom_16s",
+                    "--path",
+                    str(fasta_path),
+                    "--version",
+                    "v1",
+                    "--registry",
+                    str(registry_path),
+                    "--alias",
+                    "custom",
+                ],
+            )
+            self.assertEqual(register_result.exit_code, 0, msg=register_result.output)
+            self.assertTrue(registry_path.is_file())
+
+            list_result = self.runner.invoke(
+                cli,
+                [
+                    "list-databases",
+                    "--registry",
+                    str(registry_path),
+                    "--no-builtins",
+                ],
+            )
+            self.assertEqual(list_result.exit_code, 0, msg=list_result.output)
+            self.assertIn("custom_16s", list_result.output)
+
+            check_result = self.runner.invoke(
+                cli,
+                [
+                    "check-database",
+                    "custom",
+                    "--registry",
+                    str(registry_path),
+                    "--no-hash",
+                ],
+            )
+            self.assertEqual(check_result.exit_code, 0, msg=check_result.output)
+            self.assertIn("Status: passed", check_result.output)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
+    def test_cli_only_workflow_command_documents_no_llm_path(self) -> None:
+        result = self.runner.invoke(
+            cli,
+            [
+                "cli-only-workflow",
+                "--params",
+                "pipeline_params.yaml",
+                "--output-root",
+                "work",
+            ],
+        )
+
+        self.assertEqual(result.exit_code, 0, msg=result.output)
+        self.assertIn("does not require an LLM API key", result.output)
+        self.assertIn("check-pipeline-config --params pipeline_params.yaml", result.output)
+        self.assertIn("run-pipeline-config --params pipeline_params.yaml", result.output)
+        self.assertIn("visualization-suite --final-dir", result.output)
+        self.assertIn("generate-report --final-dir", result.output)
 
     def test_taxonomy_summary_command_writes_taxonomy_and_rank_tables(self) -> None:
         temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"

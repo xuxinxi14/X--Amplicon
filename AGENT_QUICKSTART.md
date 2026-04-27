@@ -28,6 +28,12 @@
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite --final-dir work\06_final --format html
 ```
 
+查看 Agent evaluation 日志：
+
+```powershell
+& .\.tools\python-3.13.13-amd64\python.exe process.py agent-evaluation-log
+```
+
 ## 2. 默认输入
 
 - 参数文件：`pipeline_params.yaml`
@@ -199,6 +205,7 @@ You: Plot alpha boxplots and beta PCoA from work/06_final
 You: Search the project files for run_summary and summarize the latest output
 You: Summarize recent agent tool traces
 You: Run the built-in agent evaluation cases
+You: Summarize the agent evaluation log and show common recovery paths
 You: Search PubMed for 16S microbiome benchmark papers
 ```
 
@@ -211,7 +218,7 @@ The current skills are:
 | --- | --- |
 | `local_project_rag` | Search/read project files, inspect `run_summary.json`, list output artifacts, optionally preview LlamaIndex documents |
 | `agent_tracing` | Summarize and export tool-call traces from `run_logs/agent_tool_trace.jsonl` |
-| `agent_evaluation` | Run static registry/prompt checks and optional dependency checks |
+| `agent_evaluation` | Run static checks and summarize/export `run_logs/agent_evaluation_log.jsonl` |
 | `literature_evidence` | Search PubMed and fetch abstracts through Biopython Entrez |
 
 Install optional dependencies:

@@ -1,6 +1,7 @@
 # Secrets and local configuration
 .env
 *.env.local
+databases.yaml
 
 # Local Python environments and bundled runtimes
 .venv/

@@ -24,6 +24,7 @@ from .viz_common import (
     ensure_output_dir,
     maybe_file,
     validate_output_format,
+    write_chart_index,
 )
 from .viz_taxonomy import plot_taxonomy_heatmaps, plot_taxonomy_stacked_bars
 
@@ -75,6 +76,7 @@ def run_visualization_suite(
     include_beta_stats: bool = True,
     include_taxonomy_heatmaps: bool = True,
     include_taxonomy_stacked_bars: bool = True,
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate the standard visualization set for a completed pipeline run.
 
@@ -84,7 +86,7 @@ def run_visualization_suite(
             `work/00_input/metadata.txt` and then repository `metadata.txt`.
         output_dir: Plot output root. Defaults to `<final_dir>/plots`, with
             one subdirectory per visualization family.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
         sample_id_col: Metadata column containing sample IDs.
         group_col: Metadata column containing group labels.
@@ -94,6 +96,7 @@ def run_visualization_suite(
         include_beta_stats: Whether to generate beta heatmaps and group tests.
         include_taxonomy_heatmaps: Whether to generate taxonomy heatmaps.
         include_taxonomy_stacked_bars: Whether to generate taxonomy stacked bars.
+        color_palette: Optional comma-separated colors or `Group:#hex` pairs.
 
     Returns:
         A dictionary with one key per visualization family and a flattened list
@@ -126,6 +129,7 @@ def run_visualization_suite(
             for key, subdir in VISUALIZATION_OUTPUT_SUBDIRS.items()
         },
         "output_format": output_format,
+        "color_palette": color_palette,
     }
 
     results["alpha_boxplots"] = plot_alpha_boxplots(
@@ -135,6 +139,7 @@ def run_visualization_suite(
         sample_id_col=sample_id_col,
         group_col=group_col,
         output_format=output_format,
+        color_palette=color_palette,
     )
     results["alpha_barplots"] = plot_alpha_barplots(
         alpha_diversity_path=alpha_diversity_path,
@@ -143,6 +148,7 @@ def run_visualization_suite(
         sample_id_col=sample_id_col,
         group_col=group_col,
         output_format=output_format,
+        color_palette=color_palette,
     )
     results["alpha_rarefaction"] = plot_alpha_rarefaction_curve(
         alpha_rarefaction_path=alpha_rarefaction_path,
@@ -151,6 +157,7 @@ def run_visualization_suite(
         sample_id_col=sample_id_col,
         group_col=group_col,
         output_format=output_format,
+        color_palette=color_palette,
     )
     results["beta_pcoa"] = plot_beta_pcoa(
         beta_dir=beta_dir,
@@ -160,6 +167,7 @@ def run_visualization_suite(
         sample_id_col=sample_id_col,
         group_col=group_col,
         output_format=output_format,
+        color_palette=color_palette,
     )
 
     if include_cpcoa:
@@ -171,6 +179,7 @@ def run_visualization_suite(
             sample_id_col=sample_id_col,
             group_col=group_col,
             output_format=output_format,
+            color_palette=color_palette,
         )
     if include_beta_stats:
         results["beta_heatmaps"] = plot_beta_heatmaps(
@@ -181,6 +190,7 @@ def run_visualization_suite(
             sample_id_col=sample_id_col,
             group_col=group_col,
             output_format=output_format,
+            color_palette=color_palette,
         )
     if include_taxonomy_stacked_bars:
         results["taxonomy_stacked_bars"] = plot_taxonomy_stacked_bars(
@@ -191,12 +201,16 @@ def run_visualization_suite(
             sample_id_col=sample_id_col,
             group_col=group_col,
             output_format=output_format,
+            color_palette=color_palette,
         )
     if include_taxonomy_heatmaps:
         results["taxonomy_heatmaps"] = plot_taxonomy_heatmaps(
             taxonomy_summary_dir=taxonomy_summary_dir,
+            metadata_path=resolved_metadata_path,
             output_dir=_output_subdir(resolved_output_dir, "taxonomy_heatmaps"),
             levels=taxonomy_levels,
+            sample_id_col=sample_id_col,
+            group_col=group_col,
             output_format=output_format,
         )
 
@@ -219,6 +233,16 @@ def run_visualization_suite(
             seen.add(path)
             deduped_files.append(path)
 
+    index_path = write_chart_index(
+        resolved_output_dir,
+        "X-Amplicon Visualization Index",
+        deduped_files,
+        "Publication-ready alpha, beta, and taxonomy visualization outputs.",
+    )
+    if index_path not in seen:
+        deduped_files.append(index_path)
+
+    results["index"] = index_path
     results["generated_files"] = deduped_files
     results["skipped_static_exports"] = skipped_static_exports
     return results
@@ -228,7 +252,7 @@ TOOL_DEFINITIONS = [
     {
         "name": "run_visualization_suite",
         "description": (
-            "Generate the standard alpha, beta, and taxonomy visualizations for a completed "
+            "Generate publication-ready alpha, beta, and taxonomy visualizations for a completed "
             "X-Amplicon run. Reads work/06_final by default and writes charts to "
             "organized subdirectories under work/06_final/plots."
         ),
@@ -240,7 +264,7 @@ TOOL_DEFINITIONS = [
                 "output_dir": {"type": "string", "default": DEFAULT_PLOTS_DIR},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
                 },
                 "sample_id_col": {"type": "string", "default": "SampleID"},
@@ -251,6 +275,10 @@ TOOL_DEFINITIONS = [
                 "include_beta_stats": {"type": "boolean", "default": True},
                 "include_taxonomy_heatmaps": {"type": "boolean", "default": True},
                 "include_taxonomy_stacked_bars": {"type": "boolean", "default": True},
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Group:#hex pairs.",
+                },
             },
         },
         "fn": run_visualization_suite,

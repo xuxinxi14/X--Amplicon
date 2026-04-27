@@ -74,3 +74,16 @@ run_pipeline:
 
   # 可选。显式指定 vsearch 可执行文件路径。
   vsearch_path: bin\windows\vsearch.exe
+
+# 可选差异丰度分析配置示例。当前完整流程不会自动运行此部分；
+# 请在 run-pipeline-config 完成后使用 process.py differential-abundance 调用。
+# differential_analysis:
+#   group_col: Group
+#   reference_group: WT
+#   comparisons:
+#     - KO:WT
+#     - OE:WT
+#   method: wilcox
+#   pvalue: 0.05
+#   fdr: 0.2
+#   output_format: html

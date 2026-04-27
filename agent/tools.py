@@ -45,15 +45,22 @@ from src.core.vsearch_sintax import run_vsearch_sintax
 from src.core.vsearch_uchime_ref import run_vsearch_uchime_ref
 
 
-def _load_visualization_tool_definitions() -> list[dict[str, Any]]:
-    """Discover tool definitions exported by src.core.viz_* modules."""
+def _load_core_plugin_tool_definitions() -> list[dict[str, Any]]:
+    """Discover tool definitions exported by src.core plugin modules."""
 
     import src.core as core_package
 
     definitions: list[dict[str, Any]] = []
     for module_info in pkgutil.iter_modules(core_package.__path__):
         module_name = module_info.name
-        if not module_name.startswith("viz_") or module_name == "viz_common":
+        if module_name == "viz_common":
+            continue
+        if not (
+            module_name.startswith("viz_")
+            or module_name.startswith("stat_")
+            or module_name.startswith("report_")
+            or module_name.startswith("database_")
+        ):
             continue
 
         module = importlib.import_module(f"src.core.{module_name}")
@@ -542,7 +549,7 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "description": (
             "16S Step 3b - Taxonomy classification with VSEARCH SINTAX. "
             "Classifies representative OTU/ASV sequences against a reference database "
-            "(RDP 16S v18 or SILVA 16S v123) using the SINTAX algorithm. "
+            "using a registered database name, alias, or FASTA path. "
             "Produces an otus.sintax annotation file. Requires VSEARCH executable."
         ),
         "parameters": {
@@ -558,8 +565,7 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "database": {
                     "type": "string",
-                    "enum": ["rdp_16s_v18", "silva_16s_v123"],
-                    "description": "Reference database. Defaults to 'rdp_16s_v18'.",
+                    "description": "Registered database name, alias, or FASTA path. Defaults to 'rdp_16s_v18'.",
                     "default": "rdp_16s_v18",
                 },
                 "sintax_cutoff": {
@@ -836,8 +842,7 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
                 },
                 "annotation_database": {
                     "type": "string",
-                    "enum": ["rdp_16s_v18", "silva_16s_v123"],
-                    "description": "Reference database for VSEARCH SINTAX taxonomy annotation. Defaults to 'rdp_16s_v18'.",
+                    "description": "Registered database name, alias, or FASTA path for VSEARCH SINTAX taxonomy annotation. Defaults to 'rdp_16s_v18'.",
                     "default": "rdp_16s_v18",
                 },
                 "sintax_cutoff": {
@@ -906,7 +911,7 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
     },
 ]
 
-_TOOL_DEFINITIONS.extend(_load_visualization_tool_definitions())
+_TOOL_DEFINITIONS.extend(_load_core_plugin_tool_definitions())
 _TOOL_DEFINITIONS.extend(_load_skill_tool_definitions())
 
 _SESSION_PIPELINE_DEFAULTS: dict[str, Any] = {}
@@ -1135,6 +1140,33 @@ def _record_tool_trace(
         return
 
 
+def _record_tool_evaluation(
+    *,
+    tool_name: str,
+    raw_arguments: dict[str, Any],
+    resolved_arguments: dict[str, Any] | None,
+    result: dict[str, Any],
+    start_time: float,
+) -> None:
+    """Write a best-effort evaluation event for a tool call."""
+
+    try:
+        from agent.evaluation_logger import record_tool_evaluation_event
+    except Exception:  # noqa: BLE001
+        return
+
+    try:
+        record_tool_evaluation_event(
+            tool_name=tool_name,
+            raw_arguments=raw_arguments,
+            resolved_arguments=resolved_arguments,
+            result=result,
+            start_time=start_time,
+        )
+    except Exception:  # noqa: BLE001
+        return
+
+
 def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     """Execute a registered tool by name and return a structured result.
 
@@ -1171,6 +1203,13 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
             result=result,
             start_time=start_time,
         )
+        _record_tool_evaluation(
+            tool_name=name,
+            raw_arguments=arguments,
+            resolved_arguments=None,
+            result=result,
+            start_time=start_time,
+        )
         return result
 
     fn = tool_map[name]
@@ -1200,6 +1239,13 @@ def execute_tool(name: str, arguments: dict[str, Any]) -> dict[str, Any]:
         }
 
     _record_tool_trace(
+        tool_name=name,
+        raw_arguments=arguments,
+        resolved_arguments=resolved_arguments_for_trace,
+        result=response,
+        start_time=start_time,
+    )
+    _record_tool_evaluation(
         tool_name=name,
         raw_arguments=arguments,
         resolved_arguments=resolved_arguments_for_trace,

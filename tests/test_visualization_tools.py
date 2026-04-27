@@ -12,6 +12,7 @@ from click.testing import CliRunner
 
 from agent.tools import get_tool_schemas
 from process import cli
+from src.core.viz_common import validate_output_format
 from src.core.viz_pipeline import run_visualization_suite
 
 
@@ -82,11 +83,14 @@ class VisualizationToolTests(unittest.TestCase):
                 output_format="html",
                 include_cpcoa=False,
                 include_beta_stats=False,
+                color_palette="A:#111111,B:#222222",
             )
 
             generated_files = [Path(path) for path in result["generated_files"]]
             self.assertTrue(generated_files)
             self.assertTrue((final_dir / "plots" / "alpha_boxplot_chart" / "alpha_boxplots.html").is_file())
+            self.assertTrue((final_dir / "plots" / "index.html").is_file())
+            self.assertTrue((final_dir / "plots" / "alpha_boxplot_chart" / "index.html").is_file())
             self.assertTrue((final_dir / "plots" / "beta_pcoa_chart" / "beta_pcoa_report.html").is_file())
             self.assertTrue(
                 (
@@ -114,6 +118,10 @@ class VisualizationToolTests(unittest.TestCase):
         self.assertIn("plot_alpha_boxplots", names)
         self.assertIn("plot_beta_pcoa", names)
         self.assertIn("plot_taxonomy_heatmaps", names)
+        schemas = {schema["function"]["name"]: schema for schema in get_tool_schemas()}
+        output_enum = schemas["run_visualization_suite"]["function"]["parameters"]["properties"]["output_format"]["enum"]
+        self.assertIn("svg", output_enum)
+        self.assertIn("color_palette", schemas["run_visualization_suite"]["function"]["parameters"]["properties"])
 
     def test_individual_visualization_defaults_use_chart_subdirectories(self) -> None:
         schemas = {schema["function"]["name"]: schema for schema in get_tool_schemas()}
@@ -136,6 +144,9 @@ class VisualizationToolTests(unittest.TestCase):
         finally:
             rmtree(temp_path, ignore_errors=True)
 
+    def test_visualization_output_format_accepts_svg(self) -> None:
+        self.assertEqual(validate_output_format("svg"), "svg")
+
     def test_process_visualization_suite_command(self) -> None:
         temp_path = Path("tests") / f"tmp_viz_{uuid4().hex}"
         try:
@@ -153,6 +164,8 @@ class VisualizationToolTests(unittest.TestCase):
                     str(output_dir),
                     "--format",
                     "html",
+                    "--color-palette",
+                    "A:#111111,B:#222222",
                     "--skip-cpcoa",
                     "--skip-beta-stats",
                 ],
@@ -160,6 +173,7 @@ class VisualizationToolTests(unittest.TestCase):
 
             self.assertEqual(result.exit_code, 0, msg=result.output)
             self.assertIn("Visualization suite completed successfully", result.output)
+            self.assertTrue((output_dir / "index.html").is_file())
             self.assertTrue((output_dir / "alpha_boxplot_chart" / "alpha_boxplots.html").is_file())
             self.assertTrue((output_dir / "taxonomy_heatmap_chart" / "taxonomy_heatmap_report.html").is_file())
         finally:

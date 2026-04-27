@@ -24,6 +24,14 @@ _PROJECT_ROOT = Path(__file__).parent.parent
 _ENV_FILE = _PROJECT_ROOT / ".env"
 
 DEFAULT_MODEL_FALLBACK = "claude-sonnet-4-6"
+PLACEHOLDER_API_KEYS = {
+    "sk-your-actual-key-here",
+    "sk-...",
+    "your-api-key",
+    "your-actual-key",
+    "replace-me",
+    "changeme",
+}
 
 # Models listed here are shown by --list-models. Not exhaustive.
 KNOWN_MODELS: list[tuple[str, str]] = [
@@ -83,6 +91,16 @@ def _get_env(key: str, env_file_values: dict[str, str], default: str = "") -> st
     return os.environ.get(key) or env_file_values.get(key) or default
 
 
+def _clean_api_key(value: str) -> str:
+    text = str(value or "").strip()
+    lowered = text.lower()
+    if not text or lowered in PLACEHOLDER_API_KEYS:
+        return ""
+    if "your-" in lowered or "replace" in lowered:
+        return ""
+    return text
+
+
 class AgentConfig:
     """Resolved configuration for the agent.
 
@@ -111,7 +129,7 @@ class AgentConfig:
             or DEFAULT_MODEL_FALLBACK
         )
 
-        self.api_key: str = (
+        self.api_key: str = _clean_api_key(
             api_key
             or _get_env("LLM_API_KEY", _env)
             or _get_env("OPENAI_API_KEY", _env)

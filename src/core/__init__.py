@@ -25,15 +25,30 @@ from .alpha_diversity import (
 from .beta_diversity import (
     calculate_beta_distance,
 )
+from .database_registry import (
+    check_database,
+    list_databases,
+    register_database,
+    resolve_database_record,
+)
 from .feature_filter import (
     calculate_group_abundance,
 )
 from .raw_amplicon_pipeline import (
     run_raw_amplicon_pipeline,
 )
+from .report_generator import (
+    generate_analysis_report,
+)
 from .taxonomy_summary import (
     parse_sintax_to_dataframe,
     summarize_taxa_abundance,
+)
+from .stat_taxonomy import (
+    build_differential_comparison_plan,
+    plot_differential_heatmap,
+    plot_differential_volcano,
+    run_taxonomy_differential_abundance,
 )
 from .vsearch_uchime_ref import (
     load_vsearch_uchime_ref_defaults,
@@ -67,9 +82,18 @@ __all__ = [
     "calculate_rarefaction_curve",
     "calculate_group_abundance",
     "calculate_beta_distance",
+    "list_databases",
+    "check_database",
+    "register_database",
+    "resolve_database_record",
     "parse_sintax_to_dataframe",
     "summarize_taxa_abundance",
+    "build_differential_comparison_plan",
+    "run_taxonomy_differential_abundance",
+    "plot_differential_volcano",
+    "plot_differential_heatmap",
     "run_raw_amplicon_pipeline",
+    "generate_analysis_report",
     "load_usearch_otu_defaults",
     "run_usearch_otu_clustering",
     "load_usearch_asv_defaults",

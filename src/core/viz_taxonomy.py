@@ -20,17 +20,21 @@ from .viz_common import (
     DEFAULT_TAXONOMY_LEVELS,
     DEFAULT_TAXONOMY_HEATMAP_DIR,
     DEFAULT_TAXONOMY_STACKED_BAR_DIR,
+    apply_publication_theme,
     build_sample_metadata,
     ensure_output_dir,
     find_taxonomy_files,
-    plotly_palette,
+    maybe_file,
     read_taxonomy_summary,
-    sanitize_id,
+    resolve_color_palette,
+    sort_groups,
     sort_sample_ids,
+    sort_samples_by_metadata,
     validate_output_format,
+    write_chart_index,
     write_html_dashboard,
     write_html_figure,
-    write_static_figure,
+    write_optional_static,
     write_table,
 )
 
@@ -88,11 +92,18 @@ def _filter_taxa(
     return kept.reset_index(drop=True)
 
 
-def _taxon_colors(taxa: Sequence[str]) -> dict[str, str]:
-    palette = plotly_palette()
-    colors: dict[str, str] = {}
-    for index, taxon in enumerate(taxa):
-        colors[str(taxon)] = "#B8C0CC" if str(taxon) == "Others" else palette[index % len(palette)]
+def _taxon_colors(
+    taxa: Sequence[str],
+    color_palette: str | Sequence[str] | dict[str, str] | None = None,
+) -> dict[str, str]:
+    colors = resolve_color_palette(
+        taxa,
+        color_palette=color_palette,
+        default_mapping={"Others": "#B8C0CC"},
+        sort_values=False,
+    )
+    if "Others" in colors:
+        colors["Others"] = "#B8C0CC"
     return colors
 
 
@@ -101,6 +112,7 @@ def _build_stacked_bar(
     sample_meta: pd.DataFrame,
     level: str,
     group_mean: bool,
+    color_palette: str | Sequence[str] | dict[str, str] | None = None,
 ) -> go.Figure:
     sample_columns = _sample_columns(table)
     relative = _relative_abundance(table, sample_columns)
@@ -128,7 +140,7 @@ def _build_stacked_bar(
             .reset_index()
             .rename(columns={"Group": "Category"})
         )
-        x_values = list(dict.fromkeys(plot_table["Category"].astype(str).tolist()))
+        x_values = sort_groups(plot_table["Category"].astype(str).tolist())
         title = f"Taxonomy Composition - {level.title()} Group Mean"
         x_title = "Group"
     else:
@@ -138,7 +150,7 @@ def _build_stacked_bar(
         x_title = "Sample"
 
     taxa = table["Taxon"].astype(str).tolist()
-    colors = _taxon_colors(taxa)
+    colors = _taxon_colors(taxa, color_palette=color_palette)
     fig = go.Figure()
     for taxon in taxa:
         subset = plot_table.loc[plot_table["Taxon"] == taxon].copy()
@@ -166,7 +178,6 @@ def _build_stacked_bar(
 
     fig.update_layout(
         title={"text": title, "x": 0.5},
-        template="plotly_white",
         width=1100 if not group_mean else 820,
         height=680,
         barmode="stack",
@@ -175,30 +186,9 @@ def _build_stacked_bar(
         legend_title_text=level.title(),
         margin={"l": 70, "r": 220, "t": 80, "b": 120},
     )
+    apply_publication_theme(fig, width=1100 if not group_mean else 820, height=680)
     fig.update_xaxes(tickangle=45 if not group_mean else 0)
     return fig
-
-
-def _write_optional_static(
-    fig: Any,
-    base_path: str,
-    output_format: str,
-    width: int,
-    height: int,
-    generated_files: list[str],
-    skipped_static: list[str],
-) -> None:
-    if output_format not in {"png", "pdf", "all"}:
-        return
-    for suffix in ("png", "pdf"):
-        if output_format not in {suffix, "all"}:
-            continue
-        static_path = f"{base_path}.{suffix}"
-        written = write_static_figure(fig, static_path, width=width, height=height)
-        if written is None:
-            skipped_static.append(static_path)
-        else:
-            generated_files.append(written)
 
 
 def plot_taxonomy_stacked_bars(
@@ -211,6 +201,8 @@ def plot_taxonomy_stacked_bars(
     top_n: int = 20,
     min_relative_abundance: float = 0.0,
     output_format: str = "html",
+    include_others: bool = True,
+    color_palette: str | list[str] | dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Generate taxonomy stacked bar charts for each taxonomy level.
 
@@ -225,8 +217,10 @@ def plot_taxonomy_stacked_bars(
         group_col: Metadata column containing group labels.
         top_n: Keep the top N taxa per level. Use 0 to disable.
         min_relative_abundance: Minimum mean relative abundance percentage.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        include_others: Whether to merge non-selected taxa into `Others`.
+        color_palette: Optional comma-separated colors or `Taxon:#hex` pairs.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -248,13 +242,26 @@ def plot_taxonomy_stacked_bars(
 
     for level, path in file_map.items():
         table = read_taxonomy_summary(path, level)
-        sample_columns = sort_sample_ids(_sample_columns(table))
+        raw_sample_columns = _sample_columns(table)
+        sample_meta = build_sample_metadata(
+            raw_sample_columns,
+            metadata_path=metadata_path,
+            sample_id_col=sample_id_col,
+            group_col=group_col,
+        )
+        sample_columns = sort_samples_by_metadata(raw_sample_columns, sample_meta)
+        sample_meta = (
+            sample_meta.set_index("SampleID", drop=False)
+            .loc[sample_columns, ["SampleID", "Group"]]
+            .reset_index(drop=True)
+        )
         table = table.loc[:, ["Taxon", *sample_columns]].copy()
         filtered = _filter_taxa(
             table,
             sample_columns,
             None if int(top_n) <= 0 else int(top_n),
             min_relative_abundance=float(min_relative_abundance),
+            include_others=bool(include_others),
         )
         filtered_path = write_table(
             filtered,
@@ -263,15 +270,20 @@ def plot_taxonomy_stacked_bars(
         )
         filtered_tables[level] = filtered_path
         generated_files.append(filtered_path)
-        sample_meta = build_sample_metadata(
-            sample_columns,
-            metadata_path=metadata_path,
-            sample_id_col=sample_id_col,
-            group_col=group_col,
+        sample_fig = _build_stacked_bar(
+            filtered,
+            sample_meta,
+            level,
+            group_mean=False,
+            color_palette=color_palette,
         )
-
-        sample_fig = _build_stacked_bar(filtered, sample_meta, level, group_mean=False)
-        group_fig = _build_stacked_bar(filtered, sample_meta, level, group_mean=True)
+        group_fig = _build_stacked_bar(
+            filtered,
+            sample_meta,
+            level,
+            group_mean=True,
+            color_palette=color_palette,
+        )
         sample_figures[level.title()] = sample_fig
         group_figures[f"{level.title()} Group Mean"] = group_fig
 
@@ -288,7 +300,7 @@ def plot_taxonomy_stacked_bars(
                     os.path.join(resolved_output_dir, f"taxonomy_group_mean_stacked_bar_{level}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             sample_fig,
             os.path.join(resolved_output_dir, f"taxonomy_stacked_bar_{level}"),
             output_format,
@@ -297,7 +309,7 @@ def plot_taxonomy_stacked_bars(
             generated_files=generated_files,
             skipped_static=skipped_static,
         )
-        _write_optional_static(
+        write_optional_static(
             group_fig,
             os.path.join(resolved_output_dir, f"taxonomy_group_mean_stacked_bar_{level}"),
             output_format,
@@ -322,6 +334,14 @@ def plot_taxonomy_stacked_bars(
                 "Taxonomy Composition Group Mean",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Taxonomy Composition Stacked Bars",
+            generated_files,
+            "Sample-level and group-mean stacked bars with top taxa and optional Others merging.",
+        )
+    )
 
     return {
         "taxonomy_summary_dir": os.path.abspath(taxonomy_summary_dir),
@@ -387,13 +407,13 @@ def _build_taxonomy_heatmap(
     fig = go.Figure(data=go.Heatmap(**heatmap_kwargs))
     fig.update_layout(
         title={"text": f"Taxonomy Heatmap - {level.title()} ({normalization})", "x": 0.5},
-        template="plotly_white",
         width=1100,
         height=max(520, min(1800, 240 + len(taxa) * 18)),
         xaxis_title="Sample",
         yaxis_title=level.title(),
         margin={"l": min(360, 100 + max((len(taxon) for taxon in taxa), default=0) * 5), "r": 100, "t": 80, "b": 100},
     )
+    apply_publication_theme(fig, width=1100, height=int(fig.layout.height or 800))
     fig.update_xaxes(tickangle=45)
     fig.update_yaxes(autorange="reversed")
     return fig
@@ -401,25 +421,33 @@ def _build_taxonomy_heatmap(
 
 def plot_taxonomy_heatmaps(
     taxonomy_summary_dir: str = "work/06_final/taxonomy_summary",
+    metadata_path: str | None = "work/00_input/metadata.txt",
     output_dir: str = DEFAULT_TAXONOMY_HEATMAP_DIR,
     levels: list[str] | None = None,
+    sample_id_col: str = "SampleID",
+    group_col: str = "Group",
     top_n: int = 80,
     min_mean_relative_abundance: float = 0.001,
     normalization: str = "zscore",
     output_format: str = "html",
+    include_others: bool = True,
 ) -> dict[str, Any]:
     """Generate taxonomy abundance heatmaps for each taxonomy level.
 
     Args:
         taxonomy_summary_dir: Directory containing kingdom.tsv through
             species.tsv from the pipeline.
+        metadata_path: Optional metadata TSV used for sample ordering.
         output_dir: Directory for generated plots and heatmap matrices.
         levels: Taxonomy levels to process. Defaults to all standard levels.
+        sample_id_col: Metadata column containing sample IDs.
+        group_col: Metadata column containing group labels.
         top_n: Keep the top N taxa per level. Use 0 to disable.
         min_mean_relative_abundance: Minimum mean relative abundance percentage.
         normalization: Heatmap normalization: `none`, `minmax`, or `zscore`.
-        output_format: `html`, `png`, `pdf`, or `all`. Static formats require
+        output_format: `html`, `png`, `pdf`, `svg`, or `all`. Static formats require
             kaleido; HTML is always attempted.
+        include_others: Whether to merge non-selected taxa into `Others`.
 
     Returns:
         A dictionary describing generated files and skipped static exports.
@@ -431,6 +459,7 @@ def plot_taxonomy_heatmaps(
 
     output_format = validate_output_format(output_format)
     resolved_output_dir = ensure_output_dir(output_dir)
+    resolved_metadata_path = maybe_file(metadata_path)
     resolved_levels = _resolve_levels(levels)
     file_map = find_taxonomy_files(taxonomy_summary_dir, levels=resolved_levels)
     generated_files: list[str] = []
@@ -440,14 +469,24 @@ def plot_taxonomy_heatmaps(
 
     for level, path in file_map.items():
         table = read_taxonomy_summary(path, level)
-        sample_columns = sort_sample_ids(_sample_columns(table))
+        raw_sample_columns = _sample_columns(table)
+        if resolved_metadata_path is not None:
+            sample_meta = build_sample_metadata(
+                raw_sample_columns,
+                metadata_path=resolved_metadata_path,
+                sample_id_col=sample_id_col,
+                group_col=group_col,
+            )
+            sample_columns = sort_samples_by_metadata(raw_sample_columns, sample_meta)
+        else:
+            sample_columns = sort_sample_ids(raw_sample_columns)
         table = table.loc[:, ["Taxon", *sample_columns]].copy()
         filtered = _filter_taxa(
             table,
             sample_columns,
             None if int(top_n) <= 0 else int(top_n),
             min_relative_abundance=float(min_mean_relative_abundance),
-            include_others=False,
+            include_others=bool(include_others),
         )
         relative = _relative_abundance(filtered, sample_columns)
         relative.index = filtered["Taxon"].astype(str)
@@ -482,7 +521,7 @@ def plot_taxonomy_heatmaps(
                     os.path.join(resolved_output_dir, f"taxonomy_heatmap_{level}.html"),
                 )
             )
-        _write_optional_static(
+        write_optional_static(
             fig,
             os.path.join(resolved_output_dir, f"taxonomy_heatmap_{level}"),
             output_format,
@@ -500,9 +539,18 @@ def plot_taxonomy_heatmaps(
                 "Taxonomy Heatmaps",
             )
         )
+    generated_files.append(
+        write_chart_index(
+            resolved_output_dir,
+            "Taxonomy Heatmaps",
+            generated_files,
+            "Taxonomy abundance heatmaps with top taxa and optional Others merging.",
+        )
+    )
 
     return {
         "taxonomy_summary_dir": os.path.abspath(taxonomy_summary_dir),
+        "metadata": resolved_metadata_path,
         "output_dir": resolved_output_dir,
         "levels": list(file_map),
         "matrix_tables": matrix_tables,
@@ -531,8 +579,13 @@ TOOL_DEFINITIONS = [
                 "min_relative_abundance": {"type": "number", "default": 0.0},
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
+                },
+                "include_others": {"type": "boolean", "default": True},
+                "color_palette": {
+                    "type": "string",
+                    "description": "Optional comma-separated colors or Taxon:#hex pairs.",
                 },
             },
         },
@@ -548,8 +601,11 @@ TOOL_DEFINITIONS = [
             "type": "object",
             "properties": {
                 "taxonomy_summary_dir": {"type": "string"},
+                "metadata_path": {"type": "string"},
                 "output_dir": {"type": "string", "default": DEFAULT_TAXONOMY_HEATMAP_DIR},
                 "levels": {"type": "array", "items": {"type": "string"}},
+                "sample_id_col": {"type": "string", "default": "SampleID"},
+                "group_col": {"type": "string", "default": "Group"},
                 "top_n": {"type": "integer", "default": 80},
                 "min_mean_relative_abundance": {"type": "number", "default": 0.001},
                 "normalization": {
@@ -559,9 +615,10 @@ TOOL_DEFINITIONS = [
                 },
                 "output_format": {
                     "type": "string",
-                    "enum": ["html", "png", "pdf", "all"],
+                    "enum": ["html", "png", "pdf", "svg", "all"],
                     "default": "html",
                 },
+                "include_others": {"type": "boolean", "default": True},
             },
         },
         "fn": plot_taxonomy_heatmaps,

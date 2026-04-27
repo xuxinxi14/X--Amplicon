@@ -352,9 +352,27 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
                 summary["outputs"]["analysis_outputs"]["rarefied_otutab"],
                 outputs["analysis_outputs"]["rarefied_otutab"],
             )
+            self.assertIn("provenance", outputs)
+            provenance_json = Path(outputs["provenance"]["json"])
+            provenance_md = Path(outputs["provenance"]["markdown"])
+            self.assertTrue(provenance_json.is_file())
+            self.assertTrue(provenance_md.is_file())
+
+            provenance = json.loads(provenance_json.read_text(encoding="utf-8"))
+            self.assertEqual(provenance["schema_version"], "1.0")
+            self.assertEqual(provenance["workflow"]["status"], "success")
+            self.assertIn("commit", provenance["project"])
+            self.assertIn("python_version", provenance["runtime"])
+            self.assertIn("packages", provenance["runtime"])
+            self.assertIn("effective_params", provenance)
+            self.assertTrue(provenance["final_file_hashes"])
+            self.assertTrue(
+                all("sha256" in item for item in provenance["final_file_hashes"])
+            )
 
             steps_by_name = {step["name"]: step for step in summary["steps"]}
             self.assertEqual(steps_by_name["generate_phylogenetic_tree"]["status"], "completed")
+            self.assertIn("duration_seconds", steps_by_name["generate_phylogenetic_tree"])
             self.assertEqual(steps_by_name["generate_analysis_outputs"]["status"], "completed")
             self.assertEqual(
                 steps_by_name["generate_analysis_outputs"]["details"]["rarefaction_depth"],
@@ -425,6 +443,15 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
             self.assertEqual(summary["error"], "mock filter failure")
             self.assertFalse(orphan_temp.exists())
             self.assertIn(str(orphan_temp.resolve()), summary["cleanup"]["cleaned_paths"])
+            self.assertTrue((output_root / "06_final" / "provenance.json").is_file())
+            provenance = json.loads(
+                (output_root / "06_final" / "provenance.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(provenance["workflow"]["status"], "failed")
+            failed_steps = {
+                step["name"]: step for step in provenance["steps"]
+            }
+            self.assertEqual(failed_steps["filter_reads"]["status"], "failed")
         finally:
             rmtree(temp_path, ignore_errors=True)
 

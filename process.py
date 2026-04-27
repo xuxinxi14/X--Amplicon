@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import json
 import os
 
 import click
@@ -16,6 +17,14 @@ from src.core.beta_diversity import (
     calculate_beta_distance,
     normalize_beta_metric_name,
 )
+from src.core.database_registry import (
+    DEFAULT_DATABASE_REGISTRY_PATH,
+    check_database,
+    list_databases,
+    register_database as register_database_record,
+    resolve_database_record,
+)
+from src.core.cli_only_workflow import build_cli_only_workflow, format_cli_only_workflow
 from src.core.feature_filter import calculate_group_abundance
 
 from src.core.otu_table_generator import (
@@ -43,6 +52,7 @@ from src.core.taxonomy_summary import (
     parse_sintax_to_dataframe,
     summarize_taxa_abundance,
 )
+from src.core.stat_taxonomy import run_taxonomy_differential_abundance
 from src.core.usearch_ASV_unoise3 import (
     load_usearch_asv_defaults,
     run_usearch_unoise3_denoising,
@@ -72,6 +82,16 @@ from src.core.workflow_common import (
     resolve_executable,
 )
 from src.utils.command_runner import CommandExecutionError
+from src.utils.provenance import (
+    PROVENANCE_SCHEMA_VERSION,
+    build_provenance_record,
+    write_json_record,
+    write_provenance_markdown,
+)
+from agent.evaluation_logger import (
+    export_evaluation_log,
+    summarize_evaluation_log,
+)
 
 CONTEXT_SETTINGS = {"help_option_names": ["-h", "--help"]}
 DEFAULT_TAXONOMY_RANKS = (
@@ -465,6 +485,18 @@ def _inspect_pipeline_config(params_path: str) -> dict[str, object]:
     )
 
 
+def _resolve_database_summary_path(value: object) -> str:
+    try:
+        record = resolve_database_record(
+            str(value),
+            require_exists=False,
+            include_hash=False,
+        )
+    except (KeyError, ValueError):
+        return os.path.abspath(str(value))
+    return os.path.abspath(str(record.get("path") or value))
+
+
 def _build_pipeline_effective_params(
     pipeline_params: dict[str, object],
     *,
@@ -483,7 +515,7 @@ def _build_pipeline_effective_params(
         "feature_method": str(pipeline_params["feature_method"]).strip().lower(),
         "feature_identity": pipeline_params["feature_identity"],
         "chimera_mode": str(pipeline_params["chimera_mode"]).strip().lower(),
-        "reference_db": os.path.abspath(str(pipeline_params["reference_db"])),
+        "reference_db": _resolve_database_summary_path(pipeline_params["reference_db"]),
         "otutab_method": str(pipeline_params["otutab_method"]).strip().lower(),
         "otutab_identity": pipeline_params["otutab_identity"],
         "annotation_database": str(pipeline_params["annotation_database"]).strip(),
@@ -729,24 +761,29 @@ def inspect_pipeline_params_dict(
 
     reference_db_path = str(effective_params["reference_db"])
     if effective_params["chimera_mode"] == "ref":
-        if os.path.isfile(reference_db_path):
+        reference_check = check_database(reference_db_path, include_hash=False)
+        if reference_check["status"] == "passed":
             checks.append(
                 _make_pipeline_check_entry(
                     "reference_database",
                     "passed",
                     "Reference database exists for chimera filtering.",
-                    reference_db=reference_db_path,
+                    reference_db=reference_check.get("path", reference_db_path),
+                    database_name=reference_check.get("name"),
+                    database_version=reference_check.get("version"),
+                    database_source=reference_check.get("source"),
                 )
             )
         else:
-            message = f"reference_db not found: {reference_db_path}"
+            message = str(reference_check.get("message") or f"reference_db not found: {reference_db_path}")
             errors.append(message)
             checks.append(
                 _make_pipeline_check_entry(
                     "reference_database",
                     "failed",
                     message,
-                    reference_db=reference_db_path,
+                    reference_db=reference_check.get("path", reference_db_path),
+                    database_name=reference_check.get("name"),
                 )
             )
     else:
@@ -774,14 +811,19 @@ def inspect_pipeline_params_dict(
             )
         )
     else:
+        annotation_check = check_database(resolved_database_path, include_hash=False)
         effective_params["annotation_database"] = resolved_database_name
+        effective_params["annotation_database_path"] = resolved_database_path
         checks.append(
             _make_pipeline_check_entry(
                 "annotation_database",
                 "passed",
-                "Annotation database preset resolves to an existing FASTA file.",
+                "Annotation database resolves to an existing FASTA file.",
                 annotation_database=resolved_database_name,
                 database_path=resolved_database_path,
+                database_version=annotation_check.get("version"),
+                taxonomy_format=annotation_check.get("taxonomy_format"),
+                database_source=annotation_check.get("source"),
             )
         )
 
@@ -898,6 +940,16 @@ def inspect_pipeline_params_dict(
                 "06_final",
                 "run_summary.json",
             ),
+            "provenance_json": os.path.join(
+                str(effective_params["output_root"]),
+                "06_final",
+                "provenance.json",
+            ),
+            "provenance_md": os.path.join(
+                str(effective_params["output_root"]),
+                "06_final",
+                "provenance.md",
+            ),
             "rarefied_otutab": os.path.join(
                 str(effective_params["output_root"]),
                 "06_final",
@@ -933,6 +985,8 @@ def _echo_pipeline_check_report(report: dict[str, object]) -> None:
     click.echo(f"[CLI] Feature method: {effective_params['feature_method']}")
     click.echo(f"[CLI] OTU table method: {effective_params['otutab_method']}")
     click.echo(f"[CLI] Annotation database: {effective_params['annotation_database']}")
+    if effective_params.get("annotation_database_path"):
+        click.echo(f"[CLI] Annotation database path: {effective_params['annotation_database_path']}")
     click.echo(f"[CLI] Filter route: {effective_params['filter_route']}")
     click.echo(f"[CLI] Rarefaction depth: {effective_params['rarefaction_depth']}")
     click.echo(f"[CLI] Rarefaction seed: {effective_params['rarefaction_seed']}")
@@ -947,6 +1001,8 @@ def _echo_pipeline_check_report(report: dict[str, object]) -> None:
     assert isinstance(planned_outputs, dict)
     click.echo(f"[CLI] Planned final directory: {planned_outputs['final_dir']}")
     click.echo(f"[CLI] Planned run summary: {planned_outputs['run_summary']}")
+    click.echo(f"[CLI] Planned provenance JSON: {planned_outputs['provenance_json']}")
+    click.echo(f"[CLI] Planned provenance Markdown: {planned_outputs['provenance_md']}")
     click.echo(f"[CLI] Planned rarefied OTU table: {planned_outputs['rarefied_otutab']}")
     click.echo(f"[CLI] Planned alpha rarefaction: {planned_outputs['alpha_rarefaction']}")
     click.echo(f"[CLI] Planned phylogenetic tree: {planned_outputs['phylogenetic_tree']}")
@@ -954,6 +1010,453 @@ def _echo_pipeline_check_report(report: dict[str, object]) -> None:
         "[CLI] Planned beta metrics: "
         + ", ".join(str(metric) for metric in planned_outputs["beta_metrics"])
     )
+
+
+@cli.command("cli-only-workflow")
+@click.option(
+    "--params",
+    "params_path",
+    default="pipeline_params.yaml",
+    show_default=True,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Pipeline params YAML path used by the deterministic workflow.",
+)
+@click.option(
+    "--output-root",
+    default="work",
+    show_default=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=str),
+    help="Pipeline output root directory.",
+)
+@click.option(
+    "--final-dir",
+    default=None,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=str),
+    help="Completed final directory. Defaults to <output-root>/06_final.",
+)
+@click.option(
+    "--no-optional",
+    is_flag=True,
+    help="Show only database, preflight, full pipeline, and provenance commands.",
+)
+def cli_only_workflow_command(
+    params_path: str,
+    output_root: str,
+    final_dir: str | None,
+    no_optional: bool,
+) -> None:
+    """Print a deterministic workflow that does not require an LLM."""
+
+    workflow = build_cli_only_workflow(
+        params_path=params_path,
+        output_root=output_root,
+        final_dir=final_dir,
+        include_optional=not no_optional,
+    )
+    click.echo(format_cli_only_workflow(workflow))
+
+
+def _format_database_hash(record: dict[str, object]) -> str:
+    observed = record.get("sha256")
+    expected = record.get("expected_sha256")
+    value = observed if isinstance(observed, str) and observed else expected
+    if not isinstance(value, str) or not value:
+        return "NA"
+    return value[:12]
+
+
+def _echo_database_record(record: dict[str, object]) -> None:
+    click.echo(f"[CLI] Name: {record.get('name', 'NA')}")
+    click.echo(f"[CLI] Status: {record.get('status', 'unknown')}")
+    click.echo(f"[CLI] Message: {record.get('message', 'NA')}")
+    click.echo(f"[CLI] Version: {record.get('version', 'NA')}")
+    click.echo(f"[CLI] Type: {record.get('type', 'NA')}")
+    click.echo(f"[CLI] Taxonomy format: {record.get('taxonomy_format', 'NA')}")
+    click.echo(f"[CLI] Source: {record.get('source', 'NA')}")
+    click.echo(f"[CLI] Path: {record.get('path', 'NA')}")
+    click.echo(f"[CLI] Size bytes: {record.get('size_bytes', 'NA')}")
+    click.echo(f"[CLI] SHA-256: {record.get('sha256') or record.get('expected_sha256') or 'NA'}")
+    if "hash_matches" in record:
+        click.echo(f"[CLI] Hash matches: {record['hash_matches']}")
+
+
+@cli.command("list-databases")
+@click.option(
+    "--registry",
+    "registry_path",
+    default=os.path.basename(DEFAULT_DATABASE_REGISTRY_PATH),
+    show_default=True,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Database registry YAML path.",
+)
+@click.option(
+    "--builtins/--no-builtins",
+    "include_builtin",
+    default=True,
+    show_default=True,
+    help="Include built-in RDP/SILVA compatibility records.",
+)
+@click.option(
+    "--with-hash",
+    "include_hash",
+    is_flag=True,
+    help="Calculate SHA-256 hashes while listing databases.",
+)
+def list_databases_command(
+    registry_path: str,
+    include_builtin: bool,
+    include_hash: bool,
+) -> None:
+    """List registered reference databases."""
+
+    try:
+        records = list_databases(
+            registry_path=registry_path,
+            include_builtin=include_builtin,
+            include_hash=include_hash,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo(f"[CLI] Registry: {os.path.abspath(registry_path)}")
+    if not os.path.exists(os.path.abspath(registry_path)):
+        click.echo("[CLI] Registry file does not exist; showing built-in records only.")
+    click.echo("[CLI] name\tversion\ttype\tformat\texists\thash\tpath")
+    for record in records:
+        click.echo(
+            "[CLI] "
+            + "\t".join(
+                [
+                    str(record.get("name", "NA")),
+                    str(record.get("version", "NA")),
+                    str(record.get("type", "NA")),
+                    str(record.get("taxonomy_format", "NA")),
+                    str(record.get("exists", "NA")),
+                    _format_database_hash(record),
+                    str(record.get("path", "NA")),
+                ]
+            )
+        )
+
+
+@cli.command("check-database")
+@click.argument("database", type=str)
+@click.option(
+    "--registry",
+    "registry_path",
+    default=os.path.basename(DEFAULT_DATABASE_REGISTRY_PATH),
+    show_default=True,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Database registry YAML path.",
+)
+@click.option(
+    "--with-hash/--no-hash",
+    "include_hash",
+    default=True,
+    show_default=True,
+    help="Calculate and verify SHA-256 when possible.",
+)
+def check_database_command(
+    database: str,
+    registry_path: str,
+    include_hash: bool,
+) -> None:
+    """Check a registered database name, alias, or FASTA path."""
+
+    try:
+        record = check_database(
+            database,
+            registry_path=registry_path,
+            include_hash=include_hash,
+        )
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    _echo_database_record(record)
+    if record.get("status") != "passed":
+        raise click.ClickException(str(record.get("message") or "Database check failed."))
+
+
+@cli.command("register-database")
+@click.option("--name", required=True, type=str, help="Database registry name.")
+@click.option(
+    "--path",
+    "sequence_path",
+    required=True,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Reference FASTA path.",
+)
+@click.option("--version", default=None, type=str, help="Database version label.")
+@click.option(
+    "--taxonomy-format",
+    default="sintax",
+    show_default=True,
+    type=str,
+    help="Taxonomy format, for example sintax.",
+)
+@click.option(
+    "--type",
+    "database_type",
+    default="taxonomy_annotation",
+    show_default=True,
+    type=str,
+    help="Database type label.",
+)
+@click.option(
+    "--registry",
+    "registry_path",
+    default=os.path.basename(DEFAULT_DATABASE_REGISTRY_PATH),
+    show_default=True,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Database registry YAML path to create or update.",
+)
+@click.option("--alias", "aliases", multiple=True, type=str, help="Optional alias.")
+@click.option("--role", "roles", multiple=True, type=str, help="Optional role label.")
+@click.option("--sha256", default=None, type=str, help="Known SHA-256 checksum.")
+@click.option(
+    "--compute-hash/--no-hash",
+    "compute_hash",
+    default=True,
+    show_default=True,
+    help="Calculate SHA-256 while registering.",
+)
+@click.option(
+    "--allow-missing",
+    is_flag=True,
+    help="Allow registering a path that does not exist yet.",
+)
+@click.option(
+    "--overwrite",
+    is_flag=True,
+    help="Overwrite an existing record with the same name.",
+)
+def register_database_command(
+    name: str,
+    sequence_path: str,
+    version: str | None,
+    taxonomy_format: str,
+    database_type: str,
+    registry_path: str,
+    aliases: tuple[str, ...],
+    roles: tuple[str, ...],
+    sha256: str | None,
+    compute_hash: bool,
+    allow_missing: bool,
+    overwrite: bool,
+) -> None:
+    """Register a database FASTA in databases.yaml."""
+
+    try:
+        record = register_database_record(
+            name=name,
+            sequence_path=sequence_path,
+            version=version,
+            taxonomy_format=taxonomy_format,
+            database_type=database_type,
+            registry_path=registry_path,
+            aliases=list(aliases),
+            roles=list(roles) if roles else None,
+            sha256=sha256,
+            compute_hash=compute_hash,
+            require_exists=not allow_missing,
+            overwrite=overwrite,
+        )
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("[CLI] Database registered successfully.")
+    click.echo(f"[CLI] Registry: {os.path.abspath(registry_path)}")
+    _echo_database_record(record)
+
+
+@cli.command("write-provenance")
+@click.option(
+    "--summary",
+    "summary_path",
+    default=os.path.join("work", "06_final", "run_summary.json"),
+    show_default=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Existing run_summary.json to convert into a provenance record.",
+)
+@click.option(
+    "--output-json",
+    "output_json",
+    default=None,
+    type=click.Path(dir_okay=False, writable=True, path_type=str),
+    help="Output provenance JSON path. Defaults to <summary_dir>/provenance.json.",
+)
+@click.option(
+    "--output-md",
+    "output_md",
+    default=None,
+    type=click.Path(dir_okay=False, writable=True, path_type=str),
+    help="Output provenance Markdown path. Defaults to <summary_dir>/provenance.md.",
+)
+def write_provenance(summary_path: str, output_json: str | None, output_md: str | None) -> None:
+    """Generate or refresh provenance files from an existing run summary."""
+
+    resolved_summary_path = os.path.abspath(summary_path)
+    final_dir = os.path.dirname(resolved_summary_path)
+    provenance_json_path = os.path.abspath(output_json or os.path.join(final_dir, "provenance.json"))
+    provenance_md_path = os.path.abspath(output_md or os.path.join(final_dir, "provenance.md"))
+
+    try:
+        with open(resolved_summary_path, "r", encoding="utf-8") as handle:
+            summary = json.load(handle)
+        if not isinstance(summary, dict):
+            raise ValueError("run_summary.json must contain a JSON object.")
+
+        summary["summary_path"] = resolved_summary_path
+        summary["provenance_path"] = provenance_json_path
+        summary["provenance_md_path"] = provenance_md_path
+        provenance = build_provenance_record(
+            project_root=os.path.dirname(os.path.abspath(__file__)),
+            summary=summary,
+            provenance_path=provenance_json_path,
+            provenance_md_path=provenance_md_path,
+        )
+        written_json = write_json_record(provenance, provenance_json_path)
+        written_md = write_provenance_markdown(provenance, provenance_md_path)
+        summary["provenance"] = {
+            "schema_version": PROVENANCE_SCHEMA_VERSION,
+            "generated_at": provenance["generated_at"],
+            "json": written_json,
+            "markdown": written_md,
+        }
+        with open(resolved_summary_path, "w", encoding="utf-8", newline="\n") as handle:
+            json.dump(summary, handle, indent=2, ensure_ascii=False)
+            handle.write("\n")
+    except (OSError, json.JSONDecodeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("[CLI] Provenance record generated successfully.")
+    click.echo(f"[CLI] Run summary: {resolved_summary_path}")
+    click.echo(f"[CLI] Provenance JSON: {written_json}")
+    click.echo(f"[CLI] Provenance Markdown: {written_md}")
+
+
+@cli.command("generate-report")
+@click.option(
+    "--final-dir",
+    default=os.path.join("work", "06_final"),
+    show_default=True,
+    type=click.Path(exists=True, file_okay=False, readable=True, path_type=str),
+    help="Completed pipeline final directory.",
+)
+@click.option(
+    "--summary",
+    "summary_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Optional run_summary.json path. Defaults to <final-dir>/run_summary.json.",
+)
+@click.option(
+    "--provenance",
+    "provenance_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Optional provenance.json path. Defaults to the path recorded in run_summary.json.",
+)
+@click.option(
+    "--output-dir",
+    default=None,
+    type=click.Path(file_okay=False, dir_okay=True, writable=True, path_type=str),
+    help="Report output directory. Defaults to <final-dir>/report.",
+)
+@click.option("--no-html", is_flag=True, help="Only write Markdown and report data JSON.")
+@click.option("--no-figures", is_flag=True, help="Do not include figure links or embedded HTML figures.")
+@click.option("--top-taxa", default=10, show_default=True, type=int, help="Top taxa per reported taxonomy level.")
+def generate_report(
+    final_dir: str,
+    summary_path: str | None,
+    provenance_path: str | None,
+    output_dir: str | None,
+    no_html: bool,
+    no_figures: bool,
+    top_taxa: int,
+) -> None:
+    """Generate a Markdown/HTML analysis report for a completed run."""
+
+    try:
+        from src.core.report_generator import generate_analysis_report
+
+        result = generate_analysis_report(
+            final_dir=final_dir,
+            summary_path=summary_path,
+            provenance_path=provenance_path,
+            output_dir=output_dir,
+            include_html=not no_html,
+            include_figures=not no_figures,
+            top_taxa=top_taxa,
+        )
+    except (FileNotFoundError, TypeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("[CLI] Analysis report generated successfully.")
+    click.echo(f"[CLI] Output directory: {result.get('output_dir')}")
+    click.echo(f"[CLI] Markdown report: {result.get('markdown')}")
+    if result.get("html"):
+        click.echo(f"[CLI] HTML report: {result.get('html')}")
+    click.echo(f"[CLI] Report data JSON: {result.get('data')}")
+    click.echo(f"[CLI] Embedded/linkable figures: {len(result.get('figures') or [])}")
+
+
+cli.add_command(generate_report, "report")
+
+
+@cli.command("agent-evaluation-log")
+@click.option(
+    "--log-path",
+    default=None,
+    type=click.Path(dir_okay=False, path_type=str),
+    help="Optional Agent evaluation JSONL path. Defaults to run_logs/agent_evaluation_log.jsonl.",
+)
+@click.option("--limit", default=20, show_default=True, type=int, help="Recent event count to print.")
+@click.option(
+    "--export-json",
+    default=None,
+    type=click.Path(dir_okay=False, writable=True, path_type=str),
+    help="Optional path to export all JSONL events as one JSON document.",
+)
+def agent_evaluation_log(
+    log_path: str | None,
+    limit: int,
+    export_json: str | None,
+) -> None:
+    """Summarize or export Agent task/tool evaluation logs."""
+
+    try:
+        summary = summarize_evaluation_log(log_path=log_path, limit=limit)
+        exported = (
+            export_evaluation_log(output_path=export_json, log_path=log_path)
+            if export_json
+            else None
+        )
+    except (OSError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    click.echo("[CLI] Agent evaluation log summary")
+    click.echo(f"[CLI] Log path: {summary.get('log_path')}")
+    click.echo(f"[CLI] Events: {summary.get('event_count')}")
+    click.echo(f"[CLI] User tasks: {summary.get('task_count')}")
+    click.echo(f"[CLI] Tool calls: {summary.get('tool_call_count')}")
+    click.echo(
+        "[CLI] Status counts: "
+        + json.dumps(summary.get("status_counts", {}), ensure_ascii=False, sort_keys=True)
+    )
+    click.echo(
+        "[CLI] Error types: "
+        + json.dumps(summary.get("error_type_counts", {}), ensure_ascii=False, sort_keys=True)
+    )
+    click.echo(
+        "[CLI] Recovery paths: "
+        + json.dumps(summary.get("recovery_path_counts", {}), ensure_ascii=False, sort_keys=True)
+    )
+    if exported is not None:
+        click.echo(f"[CLI] Exported JSON: {exported.get('output_path')}")
+
+
+cli.add_command(agent_evaluation_log, "agent-eval-log")
 
 
 @cli.command("check-pipeline-config")
@@ -1236,6 +1739,9 @@ def run_pipeline(
         f"{outputs['analysis_outputs']['taxonomy_summary_dir']}"
     )
     click.echo(f"[CLI] Run summary: {outputs['summary_path']}")
+    if outputs.get("provenance"):
+        click.echo(f"[CLI] Provenance JSON: {outputs['provenance'].get('json')}")
+        click.echo(f"[CLI] Provenance Markdown: {outputs['provenance'].get('markdown')}")
 
 
 @cli.command("run-pipeline-config")
@@ -1309,6 +1815,9 @@ def run_pipeline_config(params_path: str, check_only: bool, dry_run: bool) -> No
         f"{outputs['analysis_outputs']['taxonomy_summary_dir']}"
     )
     click.echo(f"[CLI] Run summary: {outputs['summary_path']}")
+    if outputs.get("provenance"):
+        click.echo(f"[CLI] Provenance JSON: {outputs['provenance'].get('json')}")
+        click.echo(f"[CLI] Provenance Markdown: {outputs['provenance'].get('markdown')}")
 
 
 @cli.command("vsearch-otu")
@@ -1538,7 +2047,7 @@ def vsearch_uchime_ref(
     "--database",
     default=None,
     type=str,
-    help="Database preset used for taxonomic annotation: rdp_16s_v18 or silva_16s_v123(.fa).",
+    help="Registered database name, alias, or FASTA path used for taxonomic annotation.",
 )
 @click.option(
     "--sintax-cutoff",
@@ -1624,7 +2133,7 @@ def vsearch_sintax(
 
         click.echo("[CLI] Starting VSEARCH sintax workflow.")
         click.echo(f"[CLI] Config file: {config_path}")
-        click.echo(f"[CLI] Effective database preset: {effective_database}")
+        click.echo(f"[CLI] Effective database: {effective_database}")
         click.echo(f"[CLI] Effective sintax cutoff: {effective_sintax_cutoff}")
         click.echo(
             "[CLI] Effective threads: "
@@ -1650,7 +2159,7 @@ def vsearch_sintax(
         raise click.ClickException(str(exc)) from exc
 
     click.echo("[CLI] VSEARCH sintax workflow completed successfully.")
-    click.echo(f"[CLI] Database preset: {outputs['database']}")
+    click.echo(f"[CLI] Database: {outputs['database']}")
     click.echo(f"[CLI] Annotation table: {outputs['sintax_table']}")
 
 
@@ -1981,11 +2490,16 @@ def taxonomy_summary(
     "output_format",
     default="html",
     show_default=True,
-    type=click.Choice(["html", "png", "pdf", "all"], case_sensitive=False),
-    help="Visualization output format. Static png/pdf exports require kaleido.",
+    type=click.Choice(["html", "png", "pdf", "svg", "all"], case_sensitive=False),
+    help="Visualization output format. Static png/pdf/svg exports require kaleido.",
 )
 @click.option("--sample-id-col", default="SampleID", show_default=True, help="Metadata sample ID column.")
 @click.option("--group-col", default="Group", show_default=True, help="Metadata group column.")
+@click.option(
+    "--color-palette",
+    default=None,
+    help="Optional comma-separated colors or Group:#hex pairs, for example WT:#4E79A7,KO:#E15759.",
+)
 @click.option("--beta-metric", "beta_metrics", multiple=True, help="Repeat to plot selected beta metrics.")
 @click.option(
     "--taxonomy-level",
@@ -2008,6 +2522,7 @@ def visualization_suite(
     output_format: str,
     sample_id_col: str,
     group_col: str,
+    color_palette: str | None,
     beta_metrics: tuple[str, ...],
     taxonomy_levels: tuple[str, ...],
     skip_cpcoa: bool,
@@ -2015,7 +2530,7 @@ def visualization_suite(
     skip_taxonomy_heatmaps: bool,
     skip_taxonomy_stacked_bars: bool,
 ) -> None:
-    """Generate standard visualization charts for a completed pipeline run."""
+    """Generate publication-ready visualization charts for a completed pipeline run."""
 
     try:
         from src.core.viz_pipeline import run_visualization_suite
@@ -2027,6 +2542,7 @@ def visualization_suite(
             output_format=output_format,
             sample_id_col=sample_id_col,
             group_col=group_col,
+            color_palette=color_palette,
             beta_metrics=list(beta_metrics) or None,
             taxonomy_levels=list(taxonomy_levels) or None,
             include_cpcoa=not skip_cpcoa,
@@ -2037,7 +2553,7 @@ def visualization_suite(
     except ImportError as exc:
         raise click.ClickException(
             "Visualization dependencies are not available. Install plotly and scipy; "
-            "install kaleido as well for png/pdf output. "
+            "install kaleido as well for png/pdf/svg output. "
             f"Original error: {exc}"
         ) from exc
     except (FileNotFoundError, TypeError, ValueError) as exc:
@@ -2050,12 +2566,196 @@ def visualization_suite(
     click.echo(f"[CLI] Metadata: {result.get('metadata') or '(inferred from sample IDs)'}")
     click.echo(f"[CLI] Output root: {result.get('output_dir')}")
     click.echo(f"[CLI] Output format: {result.get('output_format')}")
+    if result.get("color_palette"):
+        click.echo(f"[CLI] Color palette: {result.get('color_palette')}")
     if isinstance(result.get("output_subdirs"), dict):
         for key, path in result["output_subdirs"].items():
             click.echo(f"[CLI] Plot subdirectory ({key}): {path}")
     click.echo(f"[CLI] Generated files: {len(generated_files)}")
     if skipped_static:
         click.echo(f"[CLI] Skipped static exports: {len(skipped_static)}")
+
+
+@cli.command("differential-abundance")
+@click.option(
+    "--otutab",
+    "otutab_path",
+    default=os.path.join("work", "06_final", "otutab.txt"),
+    show_default=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Final OTU/ASV table with features as rows and samples as columns.",
+)
+@click.option(
+    "--metadata",
+    "metadata_path",
+    default=os.path.join("work", "00_input", "metadata.txt"),
+    show_default=True,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Metadata table containing sample IDs and the grouping column.",
+)
+@click.option(
+    "--output-dir",
+    default=os.path.join("work", "06_final", "statistics", "differential"),
+    show_default=True,
+    type=click.Path(file_okay=False, dir_okay=True, path_type=str),
+    help="Differential output root. Results, volcano plots, and heatmaps are written to subdirectories.",
+)
+@click.option("--group-col", default="Group", show_default=True, help="Metadata grouping column.")
+@click.option("--sample-id-col", default="SampleID", show_default=True, help="Metadata sample ID column.")
+@click.option(
+    "--compare",
+    "comparisons",
+    multiple=True,
+    help="Pairwise comparison in CASE:CONTROL or CASE_vs_CONTROL format. Repeat for multiple comparisons.",
+)
+@click.option(
+    "--reference-group",
+    default=None,
+    help="Generate all non-reference groups versus this control/reference group.",
+)
+@click.option(
+    "--comparison-plan",
+    "comparison_plan_path",
+    default=None,
+    type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
+    help="Existing comparison_plan.tsv. Mark Include=yes and add --run-confirmed-plan to run it.",
+)
+@click.option(
+    "--run-confirmed-plan",
+    is_flag=True,
+    help="Run comparisons marked Include=yes in --comparison-plan.",
+)
+@click.option(
+    "--method",
+    default="wilcox",
+    show_default=True,
+    type=click.Choice(["wilcox", "t.test"], case_sensitive=False),
+    help="Pairwise statistical test. edgeR is not bundled in the Python distribution.",
+)
+@click.option(
+    "--min-mean-relative-abundance",
+    default=0.001,
+    show_default=True,
+    type=float,
+    help="Minimum mean relative abundance percentage required for a feature to be tested.",
+)
+@click.option("--pvalue", default=0.05, show_default=True, type=float, help="P-value threshold.")
+@click.option("--fdr", default=0.2, show_default=True, type=float, help="FDR threshold.")
+@click.option(
+    "--log2fc-threshold",
+    default=0.0,
+    show_default=True,
+    type=float,
+    help="Minimum absolute log2 fold change required for Enriched/Depleted labels.",
+)
+@click.option(
+    "--taxonomy",
+    "taxonomy_path",
+    default=os.path.join("work", "06_final", "taxonomy.tsv"),
+    show_default=True,
+    type=click.Path(dir_okay=False, readable=True, path_type=str),
+    help="Optional taxonomy table used for plot hover labels and result annotation.",
+)
+@click.option(
+    "--format",
+    "output_format",
+    default="html",
+    show_default=True,
+    type=click.Choice(["html", "png", "pdf", "svg", "all"], case_sensitive=False),
+    help="Plot output format. Static png/pdf/svg exports require kaleido.",
+)
+@click.option(
+    "--min-samples-per-group",
+    default=2,
+    show_default=True,
+    type=int,
+    help="Minimum aligned sample count required in each group.",
+)
+@click.option(
+    "--top-n-heatmap",
+    default=30,
+    show_default=True,
+    type=int,
+    help="Maximum number of differential features shown in each heatmap.",
+)
+def differential_abundance(
+    otutab_path: str,
+    metadata_path: str,
+    output_dir: str,
+    group_col: str,
+    sample_id_col: str,
+    comparisons: tuple[str, ...],
+    reference_group: str | None,
+    comparison_plan_path: str | None,
+    run_confirmed_plan: bool,
+    method: str,
+    min_mean_relative_abundance: float,
+    pvalue: float,
+    fdr: float,
+    log2fc_threshold: float,
+    taxonomy_path: str | None,
+    output_format: str,
+    min_samples_per_group: int,
+    top_n_heatmap: int,
+) -> None:
+    """Run pairwise differential abundance and generate volcano/heatmap plots."""
+
+    try:
+        result = run_taxonomy_differential_abundance(
+            otutab_path=otutab_path,
+            metadata_path=metadata_path,
+            output_dir=output_dir,
+            group_col=group_col,
+            sample_id_col=sample_id_col,
+            comparisons=list(comparisons) or None,
+            reference_group=reference_group,
+            comparison_plan_path=comparison_plan_path,
+            run_confirmed_plan=run_confirmed_plan,
+            method=method,
+            min_mean_relative_abundance=min_mean_relative_abundance,
+            pvalue=pvalue,
+            fdr=fdr,
+            log2fc_threshold=log2fc_threshold,
+            taxonomy_path=taxonomy_path,
+            output_format=output_format,
+            min_samples_per_group=min_samples_per_group,
+            top_n_heatmap=top_n_heatmap,
+        )
+    except ImportError as exc:
+        raise click.ClickException(
+            "Differential plotting dependencies are not available. Install plotly and scipy; "
+            "install kaleido as well for png/pdf/svg output. "
+            f"Original error: {exc}"
+        ) from exc
+    except (FileNotFoundError, TypeError, ValueError) as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    generated_files = result.get("generated_files", [])
+    skipped_static = result.get("skipped_static_exports", [])
+    click.echo(f"[CLI] Differential abundance status: {result.get('status')}")
+    click.echo(f"[CLI] Output root: {result.get('output_dir') or output_dir}")
+    click.echo(f"[CLI] Comparison plan: {result.get('comparison_plan')}")
+    if not result.get("analysis_ran"):
+        click.echo(f"[CLI] {result.get('message')}")
+        click.echo("[CLI] No statistics or plots were generated yet.")
+        return
+
+    click.echo(f"[CLI] Method: {result.get('method')}")
+    for comparison, details in result.get("comparisons", {}).items():
+        click.echo(
+            "[CLI] Comparison "
+            f"{comparison}: features tested={details.get('features_tested')}, "
+            f"significant={details.get('significant_features')}"
+        )
+        click.echo(f"[CLI] Result table: {details.get('result_table')}")
+        click.echo(f"[CLI] Volcano directory: {details.get('volcano', {}).get('output_dir')}")
+        click.echo(f"[CLI] Heatmap directory: {details.get('heatmap', {}).get('output_dir')}")
+    click.echo(f"[CLI] Generated files: {len(generated_files)}")
+    if skipped_static:
+        click.echo(f"[CLI] Skipped static exports: {len(skipped_static)}")
+
+
+cli.add_command(differential_abundance, "taxonomy-stats")
 
 
 @cli.command("otutab-filter")

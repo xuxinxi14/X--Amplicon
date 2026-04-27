@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import uuid
 from typing import Any
 
 os.environ.setdefault("LITELLM_LOG", "ERROR")
@@ -130,72 +132,123 @@ class AmpliconAgent:
         Returns:
             The assistant's final text response for this turn.
         """
-        self.state.add_message("user", user_message)
-        messages = self._build_messages()
+        task_id = uuid.uuid4().hex
+        task_start_time = time.perf_counter()
+        turn_index = 0
+        round_count = 0
+        tool_call_count = 0
+        tool_error_count = 0
+        tool_error_types: set[str] = set()
+        recovery_paths: set[str] = set()
+        task_status = "failed"
+        failure_reason: str | None = None
+        reply_text: str | None = None
 
-        completion_kwargs: dict[str, Any] = {
-            "model": self.config.model,
-            "messages": messages,
-            "tools": self._tools,
-        }
-        if self.config.api_key:
-            completion_kwargs["api_key"] = self.config.api_key
-        if self.config.api_base:
-            completion_kwargs["api_base"] = self.config.api_base
+        try:
+            self.state.add_message("user", user_message)
+            turn_index = sum(
+                1 for message in self.state.get_messages() if message.get("role") == "user"
+            )
+            messages = self._build_messages()
 
-        for _round in range(MAX_TOOL_ROUNDS):
-            # Reasoning
-            completion_kwargs["messages"] = messages
-            response = litellm.completion(**completion_kwargs)
+            completion_kwargs: dict[str, Any] = {
+                "model": self.config.model,
+                "messages": messages,
+                "tools": self._tools,
+            }
+            if self.config.api_key:
+                completion_kwargs["api_key"] = self.config.api_key
+            if self.config.api_base:
+                completion_kwargs["api_base"] = self.config.api_base
 
-            choice = response.choices[0]
-            assistant_msg = choice.message
+            for round_index in range(MAX_TOOL_ROUNDS):
+                round_count = round_index + 1
+                # Reasoning
+                completion_kwargs["messages"] = messages
+                response = litellm.completion(**completion_kwargs)
 
-            if not assistant_msg.tool_calls:
-                reply = assistant_msg.content or ""
-                self.state.add_message("assistant", reply)
-                return reply
+                choice = response.choices[0]
+                assistant_msg = choice.message
+                tool_calls = assistant_msg.tool_calls or []
 
-            # Action
-            messages.append(assistant_msg.model_dump(exclude_none=True))
+                if not tool_calls:
+                    reply_text = assistant_msg.content or ""
+                    self.state.add_message("assistant", reply_text)
+                    task_status = "success"
+                    return reply_text
 
-            for tool_call in assistant_msg.tool_calls:
-                tool_name = tool_call.function.name
-                try:
-                    arguments: dict[str, Any] = json.loads(tool_call.function.arguments)
-                except json.JSONDecodeError:
-                    arguments = {}
+                # Action
+                messages.append(assistant_msg.model_dump(exclude_none=True))
 
-                if self.verbose:
-                    print(f"\n[Agent] Calling tool: {tool_name}")
-                    print(f"[Agent] Arguments: {json.dumps(arguments, indent=2, default=str)}")
+                for tool_call in tool_calls:
+                    tool_call_count += 1
+                    tool_name = tool_call.function.name
+                    try:
+                        arguments: dict[str, Any] = json.loads(tool_call.function.arguments)
+                    except json.JSONDecodeError:
+                        arguments = {}
 
-                # Observation
-                result = execute_tool(tool_name, arguments)
-                self.state.record_tool_result(tool_name, arguments, result)
+                    if self.verbose:
+                        print(f"\n[Agent] Calling tool: {tool_name}")
+                        print(f"[Agent] Arguments: {json.dumps(arguments, indent=2, default=str)}")
 
-                if self.verbose:
-                    if result.get("status") == "ok":
-                        print(f"[Agent] Tool '{tool_name}' succeeded.")
-                    else:
-                        print(f"[Agent] Tool '{tool_name}' failed: {result.get('error')}")
+                    # Observation
+                    result = execute_tool(tool_name, arguments)
+                    self.state.record_tool_result(tool_name, arguments, result)
 
-                observation_content = json.dumps(result, default=str)
-                messages.append(
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": observation_content,
-                    }
-                )
-                self.state.add_message("tool", observation_content)
+                    if result.get("status") == "error":
+                        tool_error_count += 1
+                        error_text = str(result.get("error", ""))
+                        self._collect_error_classification(
+                            error_text,
+                            tool_error_types=tool_error_types,
+                            recovery_paths=recovery_paths,
+                        )
 
-        fallback = (
-            "I reached the maximum number of tool-call rounds without a final answer. "
-            "Please check the tool results above and try a more specific request."
-        )
-        self.state.add_message("assistant", fallback)
-        return fallback
+                    if self.verbose:
+                        if result.get("status") == "ok":
+                            print(f"[Agent] Tool '{tool_name}' succeeded.")
+                        else:
+                            print(f"[Agent] Tool '{tool_name}' failed: {result.get('error')}")
+
+                    observation_content = json.dumps(result, default=str)
+                    messages.append(
+                        {
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": observation_content,
+                        }
+                    )
+                    self.state.add_message("tool", observation_content)
+
+            fallback = (
+                "I reached the maximum number of tool-call rounds without a final answer. "
+                "Please check the tool results above and try a more specific request."
+            )
+            reply_text = fallback
+            failure_reason = fallback
+            task_status = "max_rounds"
+            self.state.add_message("assistant", fallback)
+            return fallback
+        except Exception as exc:
+            task_status = "failed"
+            failure_reason = f"{type(exc).__name__}: {exc}"
+            raise
+        finally:
+            self._record_task_evaluation(
+                task_id=task_id,
+                user_message=user_message,
+                status=task_status,
+                start_time=task_start_time,
+                turn_index=turn_index,
+                round_count=round_count,
+                tool_call_count=tool_call_count,
+                tool_error_count=tool_error_count,
+                failure_reason=failure_reason,
+                assistant_reply=reply_text,
+                error_types=sorted(tool_error_types),
+                recovery_paths=sorted(recovery_paths),
+            )
 
     def reset(self) -> None:
         """Clear conversation history and tool results."""
@@ -220,6 +273,80 @@ class AmpliconAgent:
         )
         self.session_pipeline_params = None if params is None else dict(params)
         self.session_context = context
+
+    def _collect_error_classification(
+        self,
+        error_text: str,
+        *,
+        tool_error_types: set[str],
+        recovery_paths: set[str],
+    ) -> None:
+        """Collect best-effort error labels for task-level evaluation."""
+
+        try:
+            from agent.evaluation_logger import classify_error
+        except Exception:  # noqa: BLE001
+            return
+
+        try:
+            classification = classify_error(error_text)
+        except Exception:  # noqa: BLE001
+            return
+
+        error_type = classification.get("error_type")
+        recovery_path = classification.get("recovery_path")
+        if error_type:
+            tool_error_types.add(str(error_type))
+        if recovery_path:
+            recovery_paths.add(str(recovery_path))
+
+    def _record_task_evaluation(
+        self,
+        *,
+        task_id: str,
+        user_message: str,
+        status: str,
+        start_time: float,
+        turn_index: int,
+        round_count: int,
+        tool_call_count: int,
+        tool_error_count: int,
+        failure_reason: str | None,
+        assistant_reply: str | None,
+        error_types: list[str],
+        recovery_paths: list[str],
+    ) -> None:
+        """Write best-effort task-level evaluation data."""
+
+        try:
+            from agent.evaluation_logger import record_task_evaluation_event
+        except Exception:  # noqa: BLE001
+            return
+
+        try:
+            event = record_task_evaluation_event(
+                task_id=task_id,
+                user_message=user_message,
+                status=status,
+                start_time=start_time,
+                turn_index=turn_index,
+                round_count=round_count,
+                tool_call_count=tool_call_count,
+                tool_error_count=tool_error_count,
+                failure_reason=failure_reason,
+                assistant_reply=assistant_reply,
+                model=self.config.model,
+                llm_available=bool(self.config.api_key),
+                error_types=error_types,
+                recovery_paths=recovery_paths,
+            )
+        except Exception:  # noqa: BLE001
+            return
+
+        try:
+            self.state.record_task_result(event)
+        except Exception:  # noqa: BLE001
+            return
 
     # ------------------------------------------------------------------
     # Internal helpers

@@ -12,6 +12,13 @@ from typing import Any, Callable, Dict, Optional
 
 import pandas as pd
 
+from src.utils.provenance import (
+    PROVENANCE_SCHEMA_VERSION,
+    build_provenance_record,
+    write_json_record,
+    write_provenance_markdown,
+)
+
 from .alpha_diversity import (
     calculate_alpha_diversity,
     calculate_richness_rarefaction_curve,
@@ -22,6 +29,7 @@ from .beta_diversity import (
     PHYLOGENETIC_BETA_METRICS,
     calculate_beta_distance,
 )
+from .database_registry import resolve_database_record
 from .otutab_filter import ROUTE_16S, ROUTE_ITS, ROUTE_NONE, run_otutab_filter
 from .otu_table_generator import run_otutab_generation
 from .phylogenetic_tree import run_phylogenetic_tree_generation
@@ -51,6 +59,8 @@ WORK_SUBDIRS = {
     "final": "06_final",
 }
 RUN_SUMMARY_FILENAME = "run_summary.json"
+PROVENANCE_FILENAME = "provenance.json"
+PROVENANCE_MD_FILENAME = "provenance.md"
 DEFAULT_TAXONOMY_RANKS = (
     "Kingdom",
     "Phylum",
@@ -203,9 +213,26 @@ def _compact_dict(values: dict[str, Any]) -> dict[str, Any]:
 class PipelineContext:
     work_dirs: dict[str, str]
     summary_path: str
+    provenance_path: str
+    provenance_md_path: str
     summary: dict[str, Any]
     resolved: dict[str, Any] = field(default_factory=dict)
     results: dict[str, Any] = field(default_factory=dict)
+
+
+def _duration_seconds(started_at: str | None, completed_at: str | None) -> float | None:
+    if not started_at or not completed_at:
+        return None
+    try:
+        started = datetime.fromisoformat(str(started_at))
+        completed = datetime.fromisoformat(str(completed_at))
+    except ValueError:
+        return None
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    if completed.tzinfo is None:
+        completed = completed.replace(tzinfo=timezone.utc)
+    return round(max((completed - started).total_seconds(), 0.0), 6)
 
 
 def _start_run_step(
@@ -226,6 +253,7 @@ def _start_run_step(
 def _complete_run_step(step: dict[str, Any], **details: Any) -> None:
     step["status"] = "completed"
     step["completed_at"] = datetime.now(timezone.utc).isoformat()
+    step["duration_seconds"] = _duration_seconds(step.get("started_at"), step.get("completed_at"))
     if details:
         step["details"] = _normalize_summary_value(details)
 
@@ -233,6 +261,7 @@ def _complete_run_step(step: dict[str, Any], **details: Any) -> None:
 def _fail_run_step(step: dict[str, Any], exc: Exception) -> None:
     step["status"] = "failed"
     step["completed_at"] = datetime.now(timezone.utc).isoformat()
+    step["duration_seconds"] = _duration_seconds(step.get("started_at"), step.get("completed_at"))
     step["error"] = str(exc)
 
 
@@ -253,6 +282,42 @@ def _safe_write_run_summary(summary_path: str, summary: dict[str, Any]) -> None:
             "[RAW PIPELINE] Failed to write run summary: "
             f"{os.path.abspath(summary_path)} ({exc})"
         )
+
+
+def _write_final_run_records(context: PipelineContext) -> None:
+    context.summary["provenance_path"] = context.provenance_path
+    context.summary["provenance_md_path"] = context.provenance_md_path
+    context.summary["outputs"] = _build_pipeline_summary_outputs(context)
+    _safe_write_run_summary(context.summary_path, context.summary)
+
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    provenance = build_provenance_record(
+        project_root=project_root,
+        summary=context.summary,
+        provenance_path=context.provenance_path,
+        provenance_md_path=context.provenance_md_path,
+    )
+    provenance_path = write_json_record(provenance, context.provenance_path)
+    provenance_md_path = write_provenance_markdown(provenance, context.provenance_md_path)
+    context.results["provenance"] = {
+        "schema_version": PROVENANCE_SCHEMA_VERSION,
+        "generated_at": provenance["generated_at"],
+        "json": provenance_path,
+        "markdown": provenance_md_path,
+    }
+    context.summary["provenance"] = context.results["provenance"]
+    context.summary["outputs"] = _build_pipeline_summary_outputs(context)
+    _safe_write_run_summary(context.summary_path, context.summary)
+
+
+def _safe_write_final_run_records(context: PipelineContext) -> None:
+    try:
+        _write_final_run_records(context)
+    except Exception as exc:
+        context.summary["provenance_error"] = str(exc)
+        context.summary["outputs"] = _build_pipeline_summary_outputs(context)
+        _safe_write_run_summary(context.summary_path, context.summary)
+        print(f"[RAW PIPELINE] Failed to write provenance record: {exc}")
 
 
 def _normalize_optional_path(value: Optional[str]) -> Optional[str]:
@@ -279,6 +344,18 @@ def _normalize_optional_tree_path(value: Optional[str]) -> Optional[str]:
     if os.path.isdir(unquoted_text):
         return None
     return unquoted_text
+
+
+def _resolve_database_summary_path(value: str) -> str:
+    try:
+        record = resolve_database_record(
+            value,
+            require_exists=False,
+            include_hash=False,
+        )
+    except (KeyError, ValueError):
+        return os.path.abspath(str(value))
+    return os.path.abspath(str(record.get("path") or value))
 
 
 def _build_effective_params(
@@ -326,7 +403,7 @@ def _build_effective_params(
         "feature_method": feature_method,
         "feature_identity": feature_identity,
         "chimera_mode": chimera_mode,
-        "reference_db": os.path.abspath(reference_db),
+        "reference_db": _resolve_database_summary_path(reference_db),
         "otutab_method": otutab_method,
         "otutab_identity": otutab_identity,
         "annotation_database": annotation_database,
@@ -611,6 +688,7 @@ def _build_pipeline_summary_outputs(context: PipelineContext) -> dict[str, Any]:
             "final_outputs": context.results.get("final_outputs"),
             "phylogenetic_tree": context.results.get("phylogenetic_tree"),
             "analysis_outputs": context.results.get("analysis_outputs"),
+            "provenance": context.results.get("provenance"),
         }
     )
 
@@ -635,6 +713,7 @@ def _build_pipeline_outputs(context: PipelineContext) -> dict[str, Any]:
         "analysis_outputs": context.results["analysis_outputs"],
         "work_dirs": context.work_dirs,
         "summary_path": context.summary_path,
+        "provenance": context.results.get("provenance"),
     }
 
 
@@ -962,6 +1041,7 @@ def _step_remove_chimeras(
     )
     context.results["raw_otus_fasta"] = raw_otus_fasta_path
     context.results["chimera_outputs"] = chimera_outputs
+    context.summary["effective_params"]["reference_db"] = chimera_outputs["reference_db"]
     return {"outputs": chimera_outputs}
 
 
@@ -1014,6 +1094,14 @@ def _step_annotate_taxonomy(
     )
     context.results["raw_sintax"] = raw_sintax_path
     context.results["sintax_outputs"] = sintax_outputs
+    context.summary["effective_params"]["annotation_database"] = sintax_outputs.get(
+        "database",
+        annotation_database,
+    )
+    if sintax_outputs.get("database_path") is not None:
+        context.summary["effective_params"]["annotation_database_path"] = sintax_outputs[
+            "database_path"
+        ]
     return {"outputs": sintax_outputs}
 
 
@@ -1134,15 +1222,21 @@ def run_raw_amplicon_pipeline(
     params_source = _normalize_optional_path(params_source)
     work_dirs = _prepare_work_dirs(output_root)
     summary_path = os.path.join(work_dirs["final"], RUN_SUMMARY_FILENAME)
+    provenance_path = os.path.join(work_dirs["final"], PROVENANCE_FILENAME)
+    provenance_md_path = os.path.join(work_dirs["final"], PROVENANCE_MD_FILENAME)
     context = PipelineContext(
         work_dirs=work_dirs,
         summary_path=summary_path,
+        provenance_path=provenance_path,
+        provenance_md_path=provenance_md_path,
         summary={
             "status": "running",
             "started_at": datetime.now(timezone.utc).isoformat(),
             "failed_step": None,
             "error": None,
             "summary_path": summary_path,
+            "provenance_path": provenance_path,
+            "provenance_md_path": provenance_md_path,
             "effective_params": _build_effective_params(
                 metadata_path=metadata_path,
                 seq_dir=seq_dir,
@@ -1316,8 +1410,7 @@ def run_raw_amplicon_pipeline(
 
         context.summary["status"] = "success"
         context.summary["completed_at"] = datetime.now(timezone.utc).isoformat()
-        context.summary["outputs"] = _build_pipeline_summary_outputs(context)
-        _safe_write_run_summary(context.summary_path, context.summary)
+        _safe_write_final_run_records(context)
 
         print("[RAW PIPELINE] X-Amplicon pipeline finished successfully.")
         return _build_pipeline_outputs(context)
@@ -1330,6 +1423,5 @@ def run_raw_amplicon_pipeline(
         cleanup_summary = _cleanup_temporary_files(context.work_dirs["root"])
         if cleanup_summary["cleaned_paths"] or cleanup_summary["errors"]:
             context.summary["cleanup"] = cleanup_summary
-        context.summary["outputs"] = _build_pipeline_summary_outputs(context)
-        _safe_write_run_summary(context.summary_path, context.summary)
+        _safe_write_final_run_records(context)
         raise

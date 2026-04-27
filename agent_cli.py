@@ -20,6 +20,7 @@ import os
 import sys
 import threading
 import time
+import uuid
 from typing import Any
 
 from rich import box
@@ -32,6 +33,8 @@ from rich.rule import Rule
 from rich.syntax import Syntax
 from rich.table import Table
 from rich.text import Text
+
+from src.core.cli_only_workflow import build_cli_only_workflow, format_cli_only_workflow
 
 console = Console()
 
@@ -1065,7 +1068,7 @@ def _try_preview_result(result: dict[str, Any]) -> None:
 # /report - Markdown report generation
 # ---------------------------------------------------------------------------
 
-_REPORT_PATH = "analysis_report.md"
+_REPORT_PATH = os.path.join("work", "06_final", "report", "analysis_report.md")
 
 # Tool names that belong to each report section
 _ALPHA_TOOLS  = {"calculate_alpha_diversity", "calculate_rarefaction_curve",
@@ -1361,7 +1364,8 @@ def _cmd_report(agent: Any, *, mode: str = "write") -> None:
         agent: AmpliconAgent instance.
     """
     report_mode = mode.strip().lower()
-    report_path = os.path.abspath(_REPORT_PATH)
+    report_dir = _default_report_output_dir(agent)
+    report_path = os.path.abspath(os.path.join(report_dir, "analysis_report.md"))
 
     if report_mode in {"preview", "show"} and os.path.isfile(report_path):
         with open(report_path, encoding="utf-8") as fh:
@@ -1369,9 +1373,30 @@ def _cmd_report(agent: Any, *, mode: str = "write") -> None:
     else:
         status_text = "正在生成报告..." if _is_chinese_ui() else "Generating report..."
         with console.status(f"[bold blue]{status_text}[/bold blue]", spinner="dots"):
-            report_md = _generate_report(agent)
-            with open(_REPORT_PATH, "w", encoding="utf-8", newline="\n") as fh:
-                fh.write(report_md)
+            try:
+                from src.core.report_generator import generate_analysis_report
+
+                summary_path = _find_latest_pipeline_summary_path(agent)
+                final_dir = (
+                    os.path.dirname(summary_path)
+                    if summary_path and os.path.isfile(summary_path)
+                    else os.path.join("work", "06_final")
+                )
+                report_result = generate_analysis_report(
+                    final_dir=final_dir,
+                    summary_path=summary_path if summary_path and os.path.isfile(summary_path) else None,
+                    output_dir=report_dir,
+                    include_html=True,
+                    include_figures=True,
+                )
+                report_path = os.path.abspath(str(report_result["markdown"]))
+                with open(report_path, encoding="utf-8") as fh:
+                    report_md = fh.read()
+            except Exception:
+                report_md = _generate_report(agent)
+                os.makedirs(os.path.dirname(report_path), exist_ok=True)
+                with open(report_path, "w", encoding="utf-8", newline="\n") as fh:
+                    fh.write(report_md)
 
     lines = report_md.splitlines()
     headings = [line for line in lines if line.startswith("#")]
@@ -1454,6 +1479,19 @@ def _find_latest_pipeline_summary_path(agent: Any) -> str | None:
     return None
 
 
+def _default_report_output_dir(agent: Any) -> str:
+    summary_path = _find_latest_pipeline_summary_path(agent)
+    if summary_path:
+        return os.path.abspath(os.path.join(os.path.dirname(summary_path), "report"))
+
+    session_params = getattr(agent, "session_pipeline_params", None) or {}
+    output_root = session_params.get("output_root")
+    if isinstance(output_root, str) and output_root.strip():
+        return os.path.abspath(os.path.join(output_root, "06_final", "report"))
+
+    return os.path.abspath(os.path.join("work", "06_final", "report"))
+
+
 def _render_params_digest_panel(agent: Any) -> Panel:
     params = getattr(agent, "session_pipeline_params", None) or {}
     table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1), expand=True)
@@ -1492,7 +1530,7 @@ def _render_artifacts_panel(agent: Any) -> Panel:
         if os.path.isfile(state_path):
             table.add_row(_tr("state_updated"), _format_timestamp(os.path.getmtime(state_path)))
 
-    report_path = os.path.abspath(_REPORT_PATH)
+    report_path = os.path.abspath(os.path.join(_default_report_output_dir(agent), "analysis_report.md"))
     table.add_row(_tr("report"), report_path if os.path.isfile(report_path) else _tr("not_generated"))
     if os.path.isfile(report_path):
         table.add_row(_tr("report_updated"), _format_timestamp(os.path.getmtime(report_path)))
@@ -2731,6 +2769,10 @@ def _parse_args() -> argparse.Namespace:
         help="Path to the pipeline params YAML file shown at startup.")
     parser.add_argument("--skip-param-confirmation", action="store_true",
         help="Start the agent without the startup pipeline parameter confirmation step.")
+    parser.add_argument("--offline", action="store_true",
+        help="Start without an LLM API key. Slash commands remain available; natural-language orchestration is disabled.")
+    parser.add_argument("--require-llm", action="store_true",
+        help="Exit with a configuration error if no LLM API key is available.")
     return parser.parse_args()
 
 
@@ -2750,6 +2792,132 @@ def _print_models() -> None:
     console.print(table)
     console.print("[dim]Full list: https://docs.litellm.ai/docs/providers[/dim]")
     console.print("[dim]Proxy models: prefix with 'openai/' and set --api-base.[/dim]\n")
+
+
+class OfflineAmpliconAgent:
+    """Minimal agent shell used when no LLM API key is configured."""
+
+    llm_available = False
+
+    def __init__(
+        self,
+        *,
+        config: Any,
+        state: Any,
+        reason: str,
+    ) -> None:
+        self.config = config
+        self.state = state
+        self.offline_reason = reason
+        self.verbose = False
+        self.session_context: str | None = None
+        self.session_pipeline_params_path: str | None = None
+        self.session_pipeline_params: dict[str, Any] | None = None
+
+    def reset(self) -> None:
+        self.state.reset()
+
+    def set_session_context(self, context: str | None) -> None:
+        self.session_context = context
+
+    def set_session_pipeline_params(
+        self,
+        *,
+        params_path: str | None,
+        params: dict[str, Any] | None,
+        context: str | None = None,
+    ) -> None:
+        self.session_pipeline_params_path = (
+            None if params_path is None else os.path.abspath(params_path)
+        )
+        self.session_pipeline_params = None if params is None else dict(params)
+        self.session_context = context
+
+    def chat(self, user_message: str) -> str:
+        task_id = uuid.uuid4().hex
+        task_start_time = time.perf_counter()
+        self.state.add_message("user", user_message)
+        turn_index = sum(
+            1 for message in self.state.get_messages() if message.get("role") == "user"
+        )
+        reply = (
+            "Natural-language Agent orchestration is disabled because no LLM API key "
+            "is configured. The deterministic CLI remains fully available. Use "
+            "`python process.py cli-only-workflow` to print the recommended command "
+            "sequence, or use slash commands here: /help, /params, /status, /tools, "
+            "/report, /config, /language, /quit."
+        )
+        if _is_chinese_ui():
+            reply = (
+                "当前处于无 LLM 模式：未配置 LLM API key，因此自然语言自动编排已禁用。"
+                "确定性 CLI 仍可完整使用。可以运行 "
+                "`python process.py cli-only-workflow` 查看推荐命令序列，或在此使用 "
+                "/help、/params、/status、/tools、/report、/config、/language、/quit。"
+            )
+        self.state.add_message("assistant", reply)
+        try:
+            from agent.evaluation_logger import record_task_evaluation_event
+
+            event = record_task_evaluation_event(
+                task_id=task_id,
+                user_message=user_message,
+                status="no_llm",
+                start_time=task_start_time,
+                turn_index=turn_index,
+                round_count=0,
+                tool_call_count=0,
+                failure_reason=reply,
+                assistant_reply=reply,
+                model=getattr(self.config, "model", None),
+                llm_available=False,
+            )
+            self.state.record_task_result(event)
+        except Exception:  # noqa: BLE001
+            pass
+        return reply
+
+
+def _print_no_llm_mode_notice(reason: str, *, params_path: str, output_root: str = "work") -> None:
+    workflow_text = format_cli_only_workflow(
+        build_cli_only_workflow(
+            params_path=params_path,
+            output_root=output_root,
+        )
+    )
+
+    table = Table(box=box.SIMPLE, show_header=False, padding=(0, 1), expand=True)
+    table.add_column(style="dim", min_width=16)
+    table.add_column(style="white", overflow="fold")
+    if _is_chinese_ui():
+        table.add_row("状态", "无 LLM 模式")
+        table.add_row("原因", reason)
+        table.add_row("可用", "CLI、/params、/status、/tools、/report、/config、/language")
+        table.add_row("不可用", "自然语言自动 tool 调用，直到配置 LLM_API_KEY 或 --api-key")
+        title = "无 LLM 模式"
+    else:
+        table.add_row("Mode", "No LLM / CLI-only")
+        table.add_row("Reason", reason)
+        table.add_row("Available", "CLI, /params, /status, /tools, /report, /config, /language")
+        table.add_row("Disabled", "Natural-language tool orchestration until LLM_API_KEY or --api-key is set")
+        title = "No LLM Mode"
+
+    console.print(
+        Panel(
+            table,
+            title=f"[bold yellow]{title}[/bold yellow]",
+            border_style=COLOR_WARNING,
+            padding=(0, 1),
+        )
+    )
+    console.print(
+        Panel(
+            Syntax(workflow_text, "text", word_wrap=True),
+            title="[bold cyan]CLI-only workflow[/bold cyan]",
+            border_style=COLOR_INFO,
+            padding=(0, 1),
+        )
+    )
+    console.print()
 
 
 # ---------------------------------------------------------------------------
@@ -2961,9 +3129,14 @@ def main() -> None:
         _print_models()
         return
 
-    from agent.agent import AmpliconAgent
     from agent.config import AgentConfig
     from agent.tools import set_session_pipeline_defaults
+
+    if args.offline and args.require_llm:
+        console.print(
+            "[bold red]Configuration error:[/bold red] --offline and --require-llm cannot be used together."
+        )
+        sys.exit(2)
 
     config_kwargs: dict[str, Any] = {}
     if args.model:
@@ -2976,19 +3149,40 @@ def main() -> None:
         config_kwargs["env_file"] = args.env_file
 
     config = AgentConfig(**config_kwargs)
+    offline_reason: str | None = None
 
-    try:
-        config.validate()
-    except ValueError as exc:
-        console.print(f"[bold red]{_tr('configuration_error')}:[/bold red] {exc}")
-        sys.exit(1)
+    if args.offline:
+        offline_reason = "--offline was requested."
+    else:
+        try:
+            config.validate()
+        except ValueError as exc:
+            if args.require_llm:
+                console.print(f"[bold red]{_tr('configuration_error')}:[/bold red] {exc}")
+                sys.exit(1)
+            offline_reason = str(exc)
 
     state = _create_agent_state(args)
-    agent = AmpliconAgent(
-        config=config,
-        state=state,
-        verbose=False,
-    )
+    if offline_reason is None:
+        from agent.agent import AmpliconAgent
+
+        agent = AmpliconAgent(
+            config=config,
+            state=state,
+            verbose=False,
+        )
+    else:
+        state.startup_mode = "offline"
+        state.startup_note_key = None
+        state.startup_note_args = {}
+        state.startup_note = (
+            "LLM API key is not configured; natural-language orchestration is disabled."
+        )
+        agent = OfflineAmpliconAgent(
+            config=config,
+            state=state,
+            reason=offline_reason,
+        )
     _set_unconfirmed_pipeline_context(agent, args.params)
 
     startup_params_status = (
@@ -3000,6 +3194,8 @@ def main() -> None:
         config.summary(),
         _build_session_snapshot(agent, params_status=startup_params_status),
     )
+    if offline_reason is not None:
+        _print_no_llm_mode_notice(offline_reason, params_path=args.params)
 
     set_session_pipeline_defaults(None)
     if not args.skip_param_confirmation:
@@ -3037,7 +3233,10 @@ def main() -> None:
                 continue
 
         try:
-            if not args.quiet:
+            if not getattr(agent, "llm_available", True):
+                reply = agent.chat(user_input)
+                tool_events = []
+            elif not args.quiet:
                 activity: dict[str, Any] = {
                     "phase": "正在理解你的请求" if _is_chinese_ui() else "Thinking about your request",
                     "started_at": time.time(),

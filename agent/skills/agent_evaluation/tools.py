@@ -120,6 +120,28 @@ def run_agent_eval_cases(
     return report
 
 
+def summarize_agent_evaluation_log(
+    log_path: str | None = None,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """Summarize Agent task/tool evaluation JSONL events."""
+
+    from agent.evaluation_logger import summarize_evaluation_log
+
+    return summarize_evaluation_log(log_path=log_path, limit=limit)
+
+
+def export_agent_evaluation_log(
+    output_path: str = "run_logs/agent_evaluation_log_export.json",
+    log_path: str | None = None,
+) -> dict[str, Any]:
+    """Export Agent task/tool evaluation JSONL events to JSON."""
+
+    from agent.evaluation_logger import export_evaluation_log
+
+    return export_evaluation_log(output_path=output_path, log_path=log_path)
+
+
 TOOL_DEFINITIONS = [
     {
         "name": "list_agent_eval_cases",
@@ -151,5 +173,34 @@ TOOL_DEFINITIONS = [
             "required": [],
         },
         "fn": run_agent_eval_cases,
+    },
+    {
+        "name": "summarize_agent_evaluation_log",
+        "description": "Summarize Agent evaluation JSONL events for tasks, tool calls, errors, and recovery paths.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "log_path": {"type": "string", "description": "Optional evaluation JSONL path."},
+                "limit": {"type": "integer", "default": 20},
+            },
+            "required": [],
+        },
+        "fn": summarize_agent_evaluation_log,
+    },
+    {
+        "name": "export_agent_evaluation_log",
+        "description": "Export Agent evaluation JSONL events to a single JSON file.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "output_path": {
+                    "type": "string",
+                    "default": "run_logs/agent_evaluation_log_export.json",
+                },
+                "log_path": {"type": "string", "description": "Optional evaluation JSONL path."},
+            },
+            "required": [],
+        },
+        "fn": export_agent_evaluation_log,
     },
 ]

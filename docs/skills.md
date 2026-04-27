@@ -16,7 +16,7 @@ startup and exposes them through `/tools`.
 | --- | --- | --- |
 | `local_project_rag` | Read-only project search, file reading, run summary inspection, artifact listing, optional LlamaIndex document preview | No |
 | `agent_tracing` | JSONL tool-call tracing summaries and exports | No |
-| `agent_evaluation` | Static agent registry, prompt, and optional dependency checks | No |
+| `agent_evaluation` | Static registry/prompt checks plus task/tool evaluation log summaries and exports | No |
 | `literature_evidence` | PubMed search and abstract retrieval through Biopython Entrez | Yes |
 
 ## Optional Dependencies
@@ -57,3 +57,28 @@ X_AMPLICON_AGENT_TRACE_PATH=run_logs/custom_trace.jsonl
 ```
 
 Trace files are runtime logs and should not be committed.
+
+## Evaluation Logs
+
+Agent task/tool evaluation events are written to:
+
+```text
+run_logs/agent_evaluation_log.jsonl
+```
+
+Override this path with:
+
+```env
+X_AMPLICON_AGENT_EVAL_LOG_PATH=run_logs/custom_agent_evaluation_log.jsonl
+```
+
+Summarize or export from the terminal:
+
+```powershell
+python process.py agent-evaluation-log
+python process.py agent-evaluation-log --export-json run_logs\agent_evaluation_log_export.json
+```
+
+Evaluation logs record user-task status, tool-call counts, durations, error
+labels, and recovery-path labels. They are runtime logs and should not be
+committed.

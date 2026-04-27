@@ -36,6 +36,7 @@ class AgentState:
         self._data: dict[str, Any] = {
             "conversation": [],
             "tool_results": [],
+            "task_results": [],
             "completed_steps": [],
             "preferences": {},
             "created_at": time.time(),
@@ -116,6 +117,28 @@ class AgentState:
         return list(self._data["completed_steps"])
 
     # ------------------------------------------------------------------
+    # Task results
+    # ------------------------------------------------------------------
+
+    def record_task_result(self, task_result: dict[str, Any]) -> None:
+        """Record one user-task evaluation event in session state."""
+
+        task_results = self._data.setdefault("task_results", [])
+        if not isinstance(task_results, list):
+            task_results = []
+            self._data["task_results"] = task_results
+        task_results.append(dict(task_result))
+        self._touch()
+
+    def get_task_results(self) -> list[dict[str, Any]]:
+        """Return recorded user-task evaluation events."""
+
+        task_results = self._data.get("task_results", [])
+        if not isinstance(task_results, list):
+            return []
+        return list(task_results)
+
+    # ------------------------------------------------------------------
     # Preferences
     # ------------------------------------------------------------------
 
@@ -155,6 +178,7 @@ class AgentState:
         self._data = {
             "conversation": [],
             "tool_results": [],
+            "task_results": [],
             "completed_steps": [],
             "preferences": preferences,
             "created_at": time.time(),

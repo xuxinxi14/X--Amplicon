@@ -7,6 +7,11 @@ from typing import Any, Dict, Optional, Sequence
 
 from src.utils.command_runner import run_command
 
+from .database_registry import (
+    BUILTIN_DATABASES,
+    canonicalize_database_identifier,
+    resolve_database_record,
+)
 from .workflow_common import (
     DEFAULT_CONFIG_PATH,
     DEFAULT_VSEARCH_WINDOWS_PATH,
@@ -21,17 +26,14 @@ from .workflow_common import (
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 DATABASE_DIRECTORY = os.path.join(PROJECT_ROOT, "databas")
 DATABASE_FILE_MAP = {
-    "rdp_16s_v18": "rdp_16s_v18.fa",
-    "silva_16s_v123": "silva_16s_v123.fa",
+    name: os.path.basename(str(record["sequence_path"]))
+    for name, record in BUILTIN_DATABASES.items()
 }
-DATABASE_ALIASES = {
-    "rdp": "rdp_16s_v18",
-    "rdp_16s_v18": "rdp_16s_v18",
-    "rdp_16s_v18.fa": "rdp_16s_v18",
-    "silva": "silva_16s_v123",
-    "silva_16s_v123": "silva_16s_v123",
-    "silva_16s_v123.fa": "silva_16s_v123",
-}
+DATABASE_ALIASES = {}
+for _database_name, _database_record in BUILTIN_DATABASES.items():
+    DATABASE_ALIASES[_database_name] = _database_name
+    for _database_alias in _database_record.get("aliases", []):
+        DATABASE_ALIASES[str(_database_alias).strip().lower()] = _database_name
 FALLBACK_VSEARCH_SINTAX_DEFAULTS = {
     "database": "rdp_16s_v18",
     "sintax_cutoff": 0.1,
@@ -40,17 +42,12 @@ FALLBACK_VSEARCH_SINTAX_DEFAULTS = {
 
 def _coerce_database(value: Any) -> str:
     if value is None:
-        raise ValueError("database must be one of: rdp_16s_v18, silva_16s_v123.")
+        raise ValueError("database must be a registered database name or FASTA path.")
 
-    normalized = str(value).strip().lower().replace("\\", "/")
-    normalized_basename = os.path.basename(normalized)
-    resolved = DATABASE_ALIASES.get(normalized)
-    if resolved is None:
-        resolved = DATABASE_ALIASES.get(normalized_basename)
-    if resolved is None:
-        raise ValueError("database must be one of: rdp_16s_v18, silva_16s_v123.")
-
-    return resolved
+    database = str(value).strip()
+    if not database:
+        raise ValueError("database must be a registered database name or FASTA path.")
+    return canonicalize_database_identifier(database)
 
 
 def _resolve_sintax_cutoff(
@@ -210,18 +207,23 @@ def resolve_sintax_database_path(
     database: Optional[str] = None,
     config_path: Optional[str] = None,
 ) -> tuple[str, str]:
-    """Resolve the selected database preset and FASTA path."""
+    """Resolve the selected database name, alias, or FASTA path."""
 
     if database is None:
         database_name = load_vsearch_sintax_defaults(config_path)["database"]
     else:
         database_name = _coerce_database(database)
 
-    database_path = os.path.join(DATABASE_DIRECTORY, DATABASE_FILE_MAP[database_name])
-    if not os.path.isfile(database_path):
-        raise FileNotFoundError(f"SINTAX database file not found: {database_path}")
+    try:
+        database_record = resolve_database_record(
+            database_name,
+            require_exists=True,
+            include_hash=False,
+        )
+    except KeyError as exc:
+        raise ValueError(str(exc)) from exc
 
-    return database_name, database_path
+    return str(database_record["name"]), str(database_record["path"])
 
 
 def run_vsearch_sintax(

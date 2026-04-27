@@ -11,9 +11,11 @@ from uuid import uuid4
 
 from agent.state import AgentState
 from agent.tools import execute_tool, get_tool_schemas, set_session_pipeline_defaults
+from agent.config import AgentConfig
 from agent_cli import (
     LANGUAGE_CHINESE,
     LANGUAGE_ENGLISH,
+    OfflineAmpliconAgent,
     _build_input_prompt,
     _build_next_actions,
     _build_pipeline_param_rows,
@@ -380,6 +382,25 @@ class AgentToolSessionDefaultTests(unittest.TestCase):
 class AgentCliStateTests(unittest.TestCase):
     """Verify default fresh sessions and explicit resume behavior."""
 
+    def test_agent_config_treats_example_api_key_as_missing(self) -> None:
+        temp_path = Path("tests") / f"tmp_agent_config_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            env_path = temp_path / ".env"
+            env_path.write_text(
+                "LLM_API_KEY=sk-your-actual-key-here\nDEFAULT_MODEL=gpt-4o\n",
+                encoding="utf-8",
+            )
+
+            with patch.dict("os.environ", {}, clear=True):
+                config = AgentConfig(env_file=str(env_path))
+
+            self.assertEqual(config.api_key, "")
+            with self.assertRaises(ValueError):
+                config.validate()
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
     def test_create_agent_state_starts_fresh_without_resume(self) -> None:
         temp_path = Path("tests") / f"tmp_agent_state_{uuid4().hex}"
         temp_path.mkdir(parents=True, exist_ok=True)
@@ -413,6 +434,27 @@ class AgentCliStateTests(unittest.TestCase):
 
             self.assertEqual(len(state.get_messages()), 2)
             self.assertEqual(state.get_messages()[0]["content"], "old question")
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
+    def test_offline_agent_records_user_turn_without_llm(self) -> None:
+        temp_path = Path("tests") / f"tmp_agent_state_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            state = AgentState(str(temp_path / "agent_state.json"), autoload=False)
+            agent = OfflineAmpliconAgent(
+                config=AgentConfig(api_key="", env_file=str(temp_path / "missing.env")),
+                state=state,
+                reason="missing key",
+            )
+
+            reply = agent.chat("run my analysis")
+
+            self.assertIn("CLI", reply)
+            self.assertIn("cli-only-workflow", reply)
+            messages = state.get_messages()
+            self.assertEqual(messages[0]["role"], "user")
+            self.assertEqual(messages[1]["role"], "assistant")
         finally:
             rmtree(temp_path, ignore_errors=True)
 
