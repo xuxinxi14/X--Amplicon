@@ -1,60 +1,62 @@
+[English](README.md) | [中文](README_zh.md)
+
 # X-Amplicon
 
-X-Amplicon 是一个面向 16S rRNA 扩增子双端测序数据的 Python 工作流和 AI Agent。它可以从原始 paired-end FASTQ 与 metadata 出发，完成序列合并、质量控制、去冗余、OTU/ASV 生成、去嵌合体、OTU 表构建、物种注释、过滤、等量抽样、alpha/beta 多样性、taxonomy summary，并在完整分析后生成 alpha、beta 和 taxonomy 可视化图表。
+X-Amplicon is a Python workflow and AI Agent for 16S rRNA amplicon paired-end sequencing data. Starting from raw paired-end FASTQ files and a metadata table, it performs read merging, quality control, dereplication, OTU/ASV generation, chimera removal, OTU table construction, taxonomic annotation, filtering, rarefaction, alpha/beta diversity analysis, and taxonomy summary — and then generates alpha, beta, and taxonomy visualization plots after the full analysis completes.
 
-推荐入口是 `process.py run-pipeline-config`，参数由 `pipeline_params.yaml` 管理。Agent 模式通过 `agent_cli.py` 启动，内部调用同一批核心工具。
+The recommended entry point is `process.py run-pipeline-config`, with parameters managed by `pipeline_params.yaml`. Agent mode is launched via `agent_cli.py`, which internally calls the same set of core tools.
 
-所有命令示例默认在仓库根目录运行：
+All command examples assume you are running from the repository root directory:
 
 ```powershell
 cd D:\16s_translate\X-Amplicon
 ```
 
-## 1. 快速开始
+## 1. Quick Start
 
-首次在 Windows 上使用时，先运行初始化脚本：
+When using on Windows for the first time, run the initialization script:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1
 ```
 
-国内网络安装依赖较慢时可以使用清华 PyPI 镜像：
+If your network is slow when installing dependencies (common in China), use the Tsinghua PyPI mirror:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror
 ```
 
-如果需要导出 `png`、`pdf` 或 `all` 静态图，加上 `-InstallStaticExport` 安装 `kaleido`：
+If you need to export `png`, `pdf`, or `all` static plots, add `-InstallStaticExport` to install `kaleido`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -InstallStaticExport
 ```
 
-### 1.1 检查配置
+### 1.1 Check Configuration
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
-这个命令只验证参数、输入路径、样本匹配和外部可执行文件，不启动耗时分析。
+This command only validates parameters, input paths, sample matching, and external executables — it does not start any time-consuming analysis.
 
-等价预检查入口：
+Equivalent pre-check entry point:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml --check-only
 ```
 
-`--dry-run` 是 `--check-only` 的同义入口。
+`--dry-run` is an alias for `--check-only`.
 
-### 1.2 运行完整流程
+### 1.2 Run the Full Pipeline
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml
 ```
 
-### 1.3 生成标准可视化
+### 1.3 Generate Standard Visualizations
 
-完整流程完成后运行：
+Run after the full pipeline completes:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
@@ -62,79 +64,79 @@ powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -In
   --format html
 ```
 
-默认图表输出到 `work\06_final\plots\`，每类图表单独放入子目录。
+Plot output defaults to `work\06_final\plots\`, with each chart type placed in its own subdirectory.
 
-### 1.4 启动 Agent
+### 1.4 Launch the Agent
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
 ```
 
-常用交互命令：
+Common interactive commands:
 
-| 命令 | 作用 |
+| Command | Description |
 | --- | --- |
-| `/tools` | 查看 Agent 可调用工具 |
-| `/params` | 查看当前 pipeline 参数 |
-| `/language` | 切换 CLI 语言；输入 `Chinese` 或 `English` |
-| `/status` | 查看会话状态 |
-| `/report` | 生成 Markdown 分析报告 |
-| `/config` | 查看模型和 API 配置 |
-| `/quit` | 退出 |
+| `/tools` | List tools available to the Agent |
+| `/params` | View current pipeline parameters |
+| `/language` | Switch CLI language; enter `Chinese` or `English` |
+| `/status` | View session status |
+| `/report` | Generate a Markdown analysis report |
+| `/config` | View model and API configuration |
+| `/quit` | Exit |
 
-## 2. 输入文件和参数
+## 2. Input Files and Parameters
 
-完整流程默认读取根目录的 `pipeline_params.yaml`。常用字段如下：
+The full pipeline reads `pipeline_params.yaml` from the repository root by default. Common fields:
 
-| 参数 | 说明 |
+| Parameter | Description |
 | --- | --- |
-| `metadata_path` | metadata 表路径，第一列为样本 ID，或包含 `SampleID` 列 |
-| `seq_dir` | 原始双端 FASTQ 文件目录 |
-| `read1_suffix` / `read2_suffix` | 根据样本 ID 匹配 R1/R2 文件的后缀 |
-| `output_root` | 输出根目录，默认通常是 `work` |
-| `fastq_stripleft` / `fastq_stripright` | 过滤前从 reads 两端剪切的碱基数 |
-| `fastq_maxee_rate` | 质量过滤最大 expected error rate |
-| `feature_method` | `usearch-asv`、`usearch-otu` 或 `vsearch-otu` |
-| `feature_minsize` | unique 序列或 feature 生成的最小丰度 |
-| `chimera_mode` | `ref` 或 `none` |
-| `reference_db` | 参考去嵌合体数据库 FASTA |
-| `otutab_method` | `usearch` 或 `vsearch` |
-| `annotation_database` | `rdp_16s_v18` 或 `silva_16s_v123` |
-| `filter_route` | `16s`、`its` 或 `none` |
-| `rarefaction_depth` | 等量抽样深度，`0` 表示自动取最小样本深度 |
-| `rarefaction_seed` | 等量抽样和稀释曲线随机种子 |
-| `threads` | 外部命令线程数 |
-| `usearch_path` / `vsearch_path` | 可选，显式指定可执行文件路径 |
+| `metadata_path` | Path to the metadata table; first column is sample ID, or a `SampleID` column is present |
+| `seq_dir` | Directory containing raw paired-end FASTQ files |
+| `read1_suffix` / `read2_suffix` | Suffixes used to match R1/R2 files by sample ID |
+| `output_root` | Output root directory; usually `work` |
+| `fastq_stripleft` / `fastq_stripright` | Number of bases to trim from each end of reads before filtering |
+| `fastq_maxee_rate` | Maximum expected error rate for quality filtering |
+| `feature_method` | `usearch-asv`, `usearch-otu`, or `vsearch-otu` |
+| `feature_minsize` | Minimum abundance for unique sequences or feature generation |
+| `chimera_mode` | `ref` or `none` |
+| `reference_db` | Reference chimera-checking database FASTA |
+| `otutab_method` | `usearch` or `vsearch` |
+| `annotation_database` | `rdp_16s_v18` or `silva_16s_v123` |
+| `filter_route` | `16s`, `its`, or `none` |
+| `rarefaction_depth` | Rarefaction depth; `0` means auto-select the minimum sample depth |
+| `rarefaction_seed` | Random seed for rarefaction and rarefaction curve |
+| `threads` | Number of threads for external commands |
+| `usearch_path` / `vsearch_path` | Optional; explicitly specify executable paths |
 
-输入约定：
+Input conventions:
 
-- metadata 的样本 ID 必须能和 FASTQ 文件名按 `read1_suffix`、`read2_suffix` 匹配。
-- OTU/ASV 表以 feature ID 为行、样本 ID 为列，值为 reads count。
-- 完整流程会自动从最终 `otus.fa` 生成 `otus.tree`，常规运行不需要手工提供树文件。
-- 单独运行 UniFrac beta diversity 时，可以通过 `--tree` 显式提供外部树。
+- Sample IDs in metadata must match FASTQ file names using the `read1_suffix` and `read2_suffix` patterns.
+- OTU/ASV tables have feature IDs as rows and sample IDs as columns, with values as read counts.
+- The full pipeline automatically generates `otus.tree` from the final `otus.fa`; you do not need to provide a tree file manually for routine runs.
+- When running UniFrac beta diversity separately, you can explicitly provide an external tree via `--tree`.
 
-## 3. 完整流程做什么
+## 3. What the Full Pipeline Does
 
-`run-pipeline-config` 按以下顺序执行：
+`run-pipeline-config` executes the following steps in order:
 
-1. 读取 metadata 样本 ID。
-2. 匹配原始双端 FASTQ。
-3. 合并 paired-end reads。
-4. 剪切和质量过滤。
-5. 去冗余。
-6. 生成 OTU 或 ASV 代表序列。
-7. 参考库去嵌合体，或按配置跳过。
-8. 生成原始 `otutab.txt`。
-9. 运行 VSEARCH SINTAX 物种注释。
-10. 按 `filter_route` 过滤非目标分类群，生成最终核心结果。
-11. 生成 `otutab_rare.txt`、alpha diversity、alpha rarefaction、beta 距离矩阵、taxonomy summary。
-12. 如需要图表，再通过 `visualization-suite` 或 Agent 工具生成可视化。
+1. Read sample IDs from metadata.
+2. Match raw paired-end FASTQ files.
+3. Merge paired-end reads.
+4. Trim and quality-filter reads.
+5. Dereplicate.
+6. Generate OTU or ASV representative sequences.
+7. Remove chimeras against reference database, or skip based on configuration.
+8. Generate the raw `otutab.txt`.
+9. Run VSEARCH SINTAX taxonomic annotation.
+10. Filter non-target taxa by `filter_route` to produce the final core results.
+11. Generate `otutab_rare.txt`, alpha diversity, alpha rarefaction, beta distance matrices, and taxonomy summary.
+12. If plots are needed, generate visualizations separately via `visualization-suite` or Agent tools.
 
-`run-pipeline-config` 默认只产出表格和分析结果；图表是完整流程后的独立步骤。
+`run-pipeline-config` produces only tables and analysis results by default; plots are a separate step after the full pipeline.
 
-## 4. 输出结构
+## 4. Output Structure
 
-默认输出目录结构：
+Default output directory structure:
 
 ```text
 work/
@@ -182,35 +184,35 @@ work/
       taxonomy_heatmap_chart/
 ```
 
-`run_summary.json` 是完整流程的机器可读摘要，Agent 和人工排错都应优先读取它。它记录生效参数、执行步骤、关键输出、等量抽样深度、beta 指标、树文件路径和失败信息。
+`run_summary.json` is a machine-readable summary of the full pipeline run. It should be the first file checked by both the Agent and for manual troubleshooting. It records effective parameters, executed steps, key outputs, rarefaction depth, beta metrics, tree file path, and failure information.
 
-`beta/` 默认输出 `braycurtis`、`jaccard`、`euclidean`、`manhattan`。`cityblock` 只作为兼容别名接受，文档和输出文件名统一使用 `manhattan`。
+`beta/` outputs `braycurtis`, `jaccard`, `euclidean`, and `manhattan` by default. `cityblock` is accepted only as a compatibility alias; all documentation and output filenames use `manhattan`.
 
-## 5. CLI 使用总览
+## 5. CLI Overview
 
-查看全部子命令：
+List all subcommands:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py --help
 ```
 
-查看某个子命令参数：
+View options for a specific subcommand:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity --help
 ```
 
-下面每个模块统一按“用途、主要输入、主要输出、终端用法”描述。
+Each module below is described with: purpose, primary inputs, primary outputs, and terminal usage.
 
 ### 5.1 `check-pipeline-config`
 
-用途：检查 `pipeline_params.yaml`、输入文件、样本匹配、数据库和 USEARCH/VSEARCH 可执行文件。
+Purpose: Validate `pipeline_params.yaml`, input files, sample matching, databases, and USEARCH/VSEARCH executables.
 
-主要输入：`pipeline_params.yaml`
+Primary inputs: `pipeline_params.yaml`
 
-主要输出：终端检查报告；不写分析结果。
+Primary outputs: Terminal validation report; no analysis results written.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config `
@@ -219,20 +221,20 @@ work/
 
 ### 5.2 `run-pipeline-config`
 
-用途：按 YAML 参数运行完整 16S 分析流程。
+Purpose: Run the complete 16S analysis pipeline using YAML parameters.
 
-主要输入：`pipeline_params.yaml`
+Primary inputs: `pipeline_params.yaml`
 
-主要输出：`output_root\06_final\` 和 `run_summary.json`
+Primary outputs: `output_root\06_final\` and `run_summary.json`
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
   --params pipeline_params.yaml
 ```
 
-只检查不运行：
+Check without running:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config `
@@ -242,13 +244,13 @@ work/
 
 ### 5.3 `run-pipeline`
 
-用途：不用 YAML，直接在命令行传参运行完整流程。适合临时覆盖参数或脚本化运行。
+Purpose: Run the full pipeline by passing parameters directly on the command line, without a YAML file. Useful for overriding parameters on the fly or scripted runs.
 
-主要输入：metadata、FASTQ 目录、过滤参数和流程参数。
+Primary inputs: metadata, FASTQ directory, filter parameters, and pipeline parameters.
 
-主要输出：`--output-root` 下的完整 staged output。
+Primary outputs: Complete staged output under `--output-root`.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline `
@@ -269,13 +271,13 @@ work/
 
 ### 5.4 `usearch-asv`
 
-用途：用 USEARCH UNOISE3 从 unique FASTA 生成 ASV/ZOTU 代表序列。
+Purpose: Generate ASV/ZOTU representative sequences from a dereplicated FASTA using USEARCH UNOISE3.
 
-主要输入：去冗余后的 FASTA。
+Primary inputs: Dereplicated FASTA.
 
-主要输出：ASV/ZOTU FASTA 和相关中间文件。
+Primary outputs: ASV/ZOTU FASTA and associated intermediate files.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py usearch-asv `
@@ -287,13 +289,13 @@ work/
 
 ### 5.5 `usearch-otu`
 
-用途：用 USEARCH `cluster_otus` 生成 97% OTU 代表序列。
+Purpose: Generate 97% OTU representative sequences using USEARCH `cluster_otus`.
 
-主要输入：去冗余后的 FASTA。
+Primary inputs: Dereplicated FASTA.
 
-主要输出：OTU FASTA。
+Primary outputs: OTU FASTA.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py usearch-otu `
@@ -305,13 +307,13 @@ work/
 
 ### 5.6 `vsearch-otu`
 
-用途：用 VSEARCH 聚类生成 OTU 代表序列。
+Purpose: Generate OTU representative sequences using VSEARCH clustering.
 
-主要输入：去冗余后的 FASTA。
+Primary inputs: Dereplicated FASTA.
 
-主要输出：OTU FASTA。
+Primary outputs: OTU FASTA.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-otu `
@@ -324,13 +326,13 @@ work/
 
 ### 5.7 `vsearch-uchime-ref`
 
-用途：用 VSEARCH `uchime_ref` 做参考库去嵌合体，也可用 `--chimera-mode none` 跳过。
+Purpose: Remove chimeras against a reference database using VSEARCH `uchime_ref`; can be skipped with `--chimera-mode none`.
 
-主要输入：feature FASTA 和参考数据库。
+Primary inputs: Feature FASTA and reference database.
 
-主要输出：非嵌合体 FASTA。
+Primary outputs: Non-chimeric FASTA.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-uchime-ref `
@@ -343,13 +345,13 @@ work/
 
 ### 5.8 `otutab`
 
-用途：将过滤后的 reads 回贴到代表序列，生成 OTU/ASV feature table。
+Purpose: Map filtered reads against representative sequences to generate an OTU/ASV feature table.
 
-主要输入：过滤 reads FASTA、代表序列 FASTA。
+Primary inputs: Filtered reads FASTA, representative sequences FASTA.
 
-主要输出：OTU/ASV count table。
+Primary outputs: OTU/ASV count table.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
@@ -360,7 +362,7 @@ work/
   --threads 4
 ```
 
-使用 VSEARCH 后端时：
+Using the VSEARCH backend:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py otutab `
@@ -374,13 +376,13 @@ work/
 
 ### 5.9 `vsearch-sintax`
 
-用途：用 VSEARCH SINTAX 对代表序列做物种注释。
+Purpose: Taxonomically annotate representative sequences using VSEARCH SINTAX.
 
-主要输入：OTU/ASV representative FASTA。
+Primary inputs: OTU/ASV representative FASTA.
 
-主要输出：`otus.sintax`。
+Primary outputs: `otus.sintax`.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py vsearch-sintax `
@@ -393,13 +395,13 @@ work/
 
 ### 5.10 `otutab-filter`
 
-用途：按 taxonomy route 过滤 feature table 和代表序列。
+Purpose: Filter the feature table and representative sequences by taxonomy route.
 
-主要输入：原始 OTU 表、SINTAX 注释、代表序列 FASTA。
+Primary inputs: Raw OTU table, SINTAX annotations, representative sequences FASTA.
 
-主要输出：过滤后的 `otutab.txt`、`otus.fa`、`otus.sintax`、feature ID 列表和统计表。
+Primary outputs: Filtered `otutab.txt`, `otus.fa`, `otus.sintax`, feature ID list, and statistics table.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py otutab-filter `
@@ -410,17 +412,17 @@ work/
   --route 16s
 ```
 
-`--route 16s` 保留 Bacteria/Archaea 并去除 Chloroplast/Mitochondria；`--route its` 保留 Fungi；`--route none` 不过滤。
+`--route 16s` retains Bacteria/Archaea and removes Chloroplast/Mitochondria; `--route its` retains Fungi; `--route none` applies no filtering.
 
 ### 5.11 `otutab-rare`
 
-用途：对 OTU 表等量抽样，并生成 alpha diversity 表和 USEARCH otutab stats。
+Purpose: Rarefy the OTU table and generate an alpha diversity table and USEARCH otutab stats.
 
-主要输入：OTU 表。
+Primary inputs: OTU table.
 
-主要输出：等量抽样 OTU 表、alpha diversity 表、stats 文件。
+Primary outputs: Rarefied OTU table, alpha diversity table, and stats file.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py otutab-rare `
@@ -434,13 +436,13 @@ work/
 
 ### 5.12 `alpha-diversity`
 
-用途：从 OTU 表计算 alpha diversity；可选生成稀释曲线。
+Purpose: Calculate alpha diversity from an OTU table; optionally generate a rarefaction curve.
 
-主要输入：OTU 表。
+Primary inputs: OTU table.
 
-主要输出：alpha diversity TSV，可选 rarefaction TSV。
+Primary outputs: Alpha diversity TSV; optional rarefaction TSV.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
@@ -448,7 +450,7 @@ work/
   --output work\06_final\alpha\alpha_diversity.tsv
 ```
 
-带稀释曲线：
+With rarefaction curve:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py alpha-diversity `
@@ -462,13 +464,13 @@ work/
 
 ### 5.13 `beta-diversity`
 
-用途：从 OTU 表计算 beta diversity 距离矩阵。
+Purpose: Calculate beta diversity distance matrices from an OTU table.
 
-主要输入：OTU 表；UniFrac 还需要树文件。
+Primary inputs: OTU table; UniFrac also requires a tree file.
 
-主要输出：一个或多个距离矩阵 TSV。
+Primary outputs: One or more distance matrix TSV files.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
@@ -480,7 +482,7 @@ work/
   --metric manhattan
 ```
 
-计算 UniFrac：
+Calculate UniFrac:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py beta-diversity `
@@ -493,13 +495,13 @@ work/
 
 ### 5.14 `phylogenetic-tree`
 
-用途：从代表序列 FASTA 生成 rooted Newick tree，供 UniFrac 使用。
+Purpose: Generate a rooted Newick tree from the representative sequence FASTA for use with UniFrac.
 
-主要输入：`otus.fa`。
+Primary inputs: `otus.fa`.
 
-主要输出：`otus.tree`。
+Primary outputs: `otus.tree`.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py phylogenetic-tree `
@@ -510,13 +512,13 @@ work/
 
 ### 5.15 `taxonomy-summary`
 
-用途：解析 SINTAX 注释，并按 taxonomy rank 汇总相对丰度。
+Purpose: Parse SINTAX annotations and summarize relative abundance by taxonomy rank.
 
-主要输入：`otus.sintax`，可选 `otutab.txt`。
+Primary inputs: `otus.sintax`; optional `otutab.txt`.
 
-主要输出：`taxonomy.tsv` 和 `taxonomy_summary\*.tsv`。
+Primary outputs: `taxonomy.tsv` and `taxonomy_summary\*.tsv`.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
@@ -525,7 +527,7 @@ work/
   --output work\06_final
 ```
 
-只汇总部分层级：
+Summarize only selected ranks:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py taxonomy-summary `
@@ -538,13 +540,13 @@ work/
 
 ### 5.16 `feature-filter`
 
-用途：按 metadata 分组计算 feature 平均相对丰度，并过滤低丰度 feature。
+Purpose: Calculate mean relative abundance of features per metadata group and filter low-abundance features.
 
-主要输入：OTU 表和 metadata。
+Primary inputs: OTU table and metadata.
 
-主要输出：分组丰度表。
+Primary outputs: Group abundance table.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py feature-filter `
@@ -555,17 +557,17 @@ work/
   --output work\06_final\group_abundance.tsv
 ```
 
-注意：`feature-filter` 是独立分析命令，不会在 `run-pipeline-config` 中自动执行。
+Note: `feature-filter` is a standalone analysis command and is not executed automatically by `run-pipeline-config`.
 
 ### 5.17 `visualization-suite`
 
-用途：基于完整流程的 `06_final` 输出批量生成标准图表。
+Purpose: Batch-generate standard plots from the `06_final` output of the full pipeline.
 
-主要输入：`06_final` 目录，metadata 可自动从 `work\00_input\metadata.txt` 查找。
+Primary inputs: `06_final` directory; metadata is auto-discovered from `work\00_input\metadata.txt`.
 
-主要输出：`plots\` 下按图表类型分目录的 HTML/TSV/可选静态图。
+Primary outputs: HTML/TSV/optional static plots organized by chart type under `plots\`.
 
-终端用法：
+Terminal usage:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
@@ -573,7 +575,7 @@ work/
   --format html
 ```
 
-指定输出目录和部分指标：
+Specify output directory and selected metrics:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
@@ -587,7 +589,7 @@ work/
   --taxonomy-level genus
 ```
 
-跳过部分图表：
+Skip certain plots:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
@@ -596,74 +598,74 @@ work/
   --skip-beta-stats
 ```
 
-`--format png`、`--format pdf` 或 `--format all` 需要安装 `kaleido`。默认 `html` 不需要。
+`--format png`, `--format pdf`, or `--format all` require `kaleido` to be installed. The default `html` format does not.
 
-## 6. 单图可视化 Python API
+## 6. Single-Chart Python API
 
-`visualization-suite` 是推荐批量入口；如果只想生成某一类图，也可以在终端调用 Python API。以下命令都可以从仓库根目录直接运行。
+`visualization-suite` is the recommended batch entry point. If you only want to generate a specific chart type, you can also call the Python API from the terminal. All commands below can be run directly from the repository root.
 
-Alpha 箱线图：
+Alpha boxplots:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_boxplots; plot_alpha_boxplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Alpha 分组柱状图：
+Alpha grouped barplots:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_barplots; plot_alpha_barplots(alpha_diversity_path='work/06_final/alpha/alpha_diversity.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Alpha 稀释曲线：
+Alpha rarefaction curve:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_alpha_diversity import plot_alpha_rarefaction_curve; plot_alpha_rarefaction_curve(alpha_rarefaction_path='work/06_final/alpha/alpha_rarefaction.tsv', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Beta PCoA：
+Beta PCoA:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_pcoa; plot_beta_pcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Beta C-PCoA：
+Beta C-PCoA:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_cpcoa; plot_beta_cpcoa(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Beta 距离热图和组间统计：
+Beta distance heatmaps and between-group statistics:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_beta_diversity import plot_beta_heatmaps; plot_beta_heatmaps(beta_dir='work/06_final/beta', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Taxonomy 堆叠柱状图：
+Taxonomy stacked bar charts:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_stacked_bars; plot_taxonomy_stacked_bars(taxonomy_summary_dir='work/06_final/taxonomy_summary', metadata_path='work/00_input/metadata.txt', output_format='html')"
 ```
 
-Taxonomy 热图：
+Taxonomy heatmaps:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -c "from src.core.viz_taxonomy import plot_taxonomy_heatmaps; plot_taxonomy_heatmaps(taxonomy_summary_dir='work/06_final/taxonomy_summary', output_format='html')"
 ```
 
-## 7. Agent 工具和终端等价入口
+## 7. Agent Tools and Equivalent Terminal Commands
 
-Agent 工具由 `agent/tools.py` 注册。查看当前工具：
+Agent tools are registered in `agent/tools.py`. To view current tools:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe agent_cli.py
-# 进入后输入 /tools
+# then type /tools
 ```
 
-下表列出 Agent 工具和推荐终端入口：
+The table below lists Agent tools and their recommended terminal entry points:
 
-| Agent tool | 推荐终端入口 |
+| Agent tool | Recommended terminal entry point |
 | --- | --- |
-| `run_raw_amplicon_pipeline` | `process.py run-pipeline` 或 `process.py run-pipeline-config` |
+| `run_raw_amplicon_pipeline` | `process.py run-pipeline` or `process.py run-pipeline-config` |
 | `run_usearch_unoise3_denoising` | `process.py usearch-asv` |
 | `run_usearch_otu_clustering` | `process.py usearch-otu` |
 | `run_vsearch_otu_clustering` | `process.py vsearch-otu` |
@@ -682,16 +684,16 @@ Agent 工具由 `agent/tools.py` 注册。查看当前工具：
 | `parse_sintax_to_dataframe` | `process.py taxonomy-summary --sintax ... --output ...` |
 | `summarize_taxa_abundance` | `process.py taxonomy-summary --sintax ... --otutab ... --output ...` |
 | `run_visualization_suite` | `process.py visualization-suite` |
-| `plot_alpha_boxplots` | Python API,见第 6 节 |
-| `plot_alpha_barplots` | Python API,见第 6 节 |
-| `plot_alpha_rarefaction_curve` | Python API,见第 6 节 |
-| `plot_beta_pcoa` | Python API,见第 6 节 |
-| `plot_beta_cpcoa` | Python API,见第 6 节 |
-| `plot_beta_heatmaps` | Python API,见第 6 节 |
-| `plot_taxonomy_stacked_bars` | Python API,见第 6 节 |
-| `plot_taxonomy_heatmaps` | Python API,见第 6 节 |
+| `plot_alpha_boxplots` | Python API, see section 6 |
+| `plot_alpha_barplots` | Python API, see section 6 |
+| `plot_alpha_rarefaction_curve` | Python API, see section 6 |
+| `plot_beta_pcoa` | Python API, see section 6 |
+| `plot_beta_cpcoa` | Python API, see section 6 |
+| `plot_beta_heatmaps` | Python API, see section 6 |
+| `plot_taxonomy_stacked_bars` | Python API, see section 6 |
+| `plot_taxonomy_heatmaps` | Python API, see section 6 |
 
-Agent 使用自然语言即可调用这些工具，例如：
+The Agent can invoke these tools using natural language, for example:
 
 ```text
 Run the full pipeline with the current pipeline_params.yaml.
@@ -699,86 +701,86 @@ Generate all standard visualization charts for work/06_final.
 Plot beta PCoA and taxonomy stacked bars from the completed run.
 ```
 
-## 8. 依赖
+## 8. Dependencies
 
-推荐优先使用仓库内 Python：
+It is recommended to use the Python interpreter bundled in the repository:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe --version
 ```
 
-### 8.1 Python 包
+### 8.1 Python Packages
 
-核心流程、CLI、Agent 和可视化依赖的 Python 包如下：
+Python packages required by the core pipeline, CLI, Agent, and visualization:
 
-| 包 | 用途 |
+| Package | Purpose |
 | --- | --- |
-| `pyyaml` | 读取 `pipeline_params.yaml`、`config.yaml` |
+| `pyyaml` | Read `pipeline_params.yaml` and `config.yaml` |
 | `click` | `process.py` CLI |
-| `numpy` | 数值计算、距离矩阵、抽样 |
-| `pandas` | 表格读写和汇总 |
-| `scipy` | 聚类、统计、距离矩阵辅助计算 |
-| `scikit-bio` | alpha/beta diversity、UniFrac、PERMANOVA/ANOSIM |
-| `biopython` | FASTA/FASTQ 相关处理 |
-| `pydantic>=2.0` | 参数和工具 schema 支持 |
-| `plotly>=5.15` | HTML 交互式图表 |
-| `rich` | Agent CLI 终端 UI |
-| `litellm` | Agent 调用 OpenAI-compatible LLM |
-| `kaleido` | 可选，仅用于 Plotly 静态 `png`/`pdf` 导出 |
+| `numpy` | Numerical computation, distance matrices, sampling |
+| `pandas` | Table reading, writing, and summarization |
+| `scipy` | Clustering, statistics, distance matrix helpers |
+| `scikit-bio` | Alpha/beta diversity, UniFrac, PERMANOVA/ANOSIM |
+| `biopython` | FASTA/FASTQ processing |
+| `pydantic>=2.0` | Parameter and tool schema support |
+| `plotly>=5.15` | Interactive HTML charts |
+| `rich` | Agent CLI terminal UI |
+| `litellm` | Agent calls to OpenAI-compatible LLMs |
+| `kaleido` | Optional; only for Plotly static `png`/`pdf` export |
 
-安装 Agent 和可视化常用依赖：
+Install common Agent and visualization dependencies:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -m pip install litellm rich plotly
 ```
 
-如需导出静态图：
+To export static plots:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
 ```
 
-Conda 环境文件在 `environment.yml`，其中已列出主要依赖。
+A Conda environment file is available at `environment.yml`, which lists the main dependencies.
 
-### 8.2 外部工具
+### 8.2 External Tools
 
-完整流程中的特征生成、去嵌合体、OTU 表构建和注释依赖外部可执行文件：
+Feature generation, chimera removal, OTU table construction, and annotation in the full pipeline require external executables:
 
-| 工具 | 默认位置或来源 | 用途 |
+| Tool | Default location or source | Purpose |
 | --- | --- | --- |
-| USEARCH | `bin/windows/usearch.exe` 或 `--usearch-path` | UNOISE3、cluster_otus、otutab、otutab_stats、fastx_getseqs |
-| VSEARCH | `bin/windows/vsearch.exe` 或 `--vsearch-path` | cluster_size、uchime_ref、sintax、usearch_global |
+| USEARCH | `bin/windows/usearch.exe` or `--usearch-path` | UNOISE3, cluster_otus, otutab, otutab_stats, fastx_getseqs |
+| VSEARCH | `bin/windows/vsearch.exe` or `--vsearch-path` | cluster_size, uchime_ref, sintax, usearch_global |
 
-### 8.3 数据库
+### 8.3 Databases
 
-默认数据库文件：
+Default database files:
 
-| 文件 | 用途 |
+| File | Purpose |
 | --- | --- |
-| `databas/rdp_16s_v18.fa` | 去嵌合体和 SINTAX 注释 |
-| `databas/silva_16s_v123.fa` | 可选 SINTAX 注释数据库 |
+| `databas/rdp_16s_v18.fa` | Chimera removal and SINTAX annotation |
+| `databas/silva_16s_v123.fa` | Optional SINTAX annotation database |
 
-## 9. Agent 配置
+## 9. Agent Configuration
 
-Agent 使用 `.env`、环境变量或命令行参数配置模型和 API。
+The Agent is configured via `.env`, environment variables, or command-line arguments.
 
-复制模板：
+Copy the template:
 
 ```powershell
 copy .env.example .env
 ```
 
-常用变量：
+Common variables:
 
-| 变量 | 说明 |
+| Variable | Description |
 | --- | --- |
 | `LLM_API_KEY` | OpenAI-compatible API key |
-| `LLM_API_BASE` | 中转或兼容端点 base URL |
-| `DEFAULT_MODEL` | LiteLLM 模型字符串 |
-| `OPENAI_API_KEY` | `LLM_API_KEY` 未设置时的备用 key |
-| `ANTHROPIC_API_KEY` | 备用 Anthropic key |
+| `LLM_API_BASE` | Proxy or compatible endpoint base URL |
+| `DEFAULT_MODEL` | LiteLLM model string |
+| `OPENAI_API_KEY` | Fallback key when `LLM_API_KEY` is not set |
+| `ANTHROPIC_API_KEY` | Fallback Anthropic key |
 
-命令行覆盖模型和端点：
+Override model and endpoint on the command line:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe agent_cli.py `
@@ -787,63 +789,63 @@ copy .env.example .env
   --api-base https://dashscope.aliyuncs.com/compatible-mode/v1
 ```
 
-查看内置模型示例：
+View built-in model examples:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe agent_cli.py --list-models
 ```
 
-## 10. 常见问题和排错
+## 10. Troubleshooting
 
-### 10.1 先看 `run_summary.json`
+### 10.1 Check `run_summary.json` First
 
-完整流程完成或失败后，优先检查：
+After the full pipeline completes or fails, check this file first:
 
 ```text
 work\06_final\run_summary.json
 ```
 
-它比终端滚动日志更适合作为自动报告和排错依据。
+It is more suitable than scrolling terminal logs for automated reporting and debugging.
 
-### 10.2 找不到 USEARCH 或 VSEARCH
+### 10.2 USEARCH or VSEARCH Not Found
 
-先运行：
+First run:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
 ```
 
-如果提示可执行文件不可用，在 `pipeline_params.yaml` 中设置 `usearch_path`、`vsearch_path`，或在命令中传入：
+If the executable is reported as unavailable, set `usearch_path` and `vsearch_path` in `pipeline_params.yaml`, or pass them on the command line:
 
 ```powershell
 --usearch-path bin\windows\usearch.exe --vsearch-path bin\windows\vsearch.exe
 ```
 
-### 10.3 样本匹配失败
+### 10.3 Sample Matching Failure
 
-检查三项：
+Check three things:
 
-- metadata 第一列或 `SampleID` 列是否和 FASTQ 样本前缀一致。
-- `read1_suffix`、`read2_suffix` 是否和文件名一致。
-- `seq_dir` 是否指向真正的 FASTQ 目录。
+- Whether the first column or `SampleID` column of metadata matches the FASTQ sample prefixes.
+- Whether `read1_suffix` and `read2_suffix` match the actual filenames.
+- Whether `seq_dir` points to the correct FASTQ directory.
 
-### 10.4 UniFrac 没有输出
+### 10.4 No UniFrac Output
 
-完整流程会自动从 `work\06_final\otus.fa` 生成 `otus.tree`。如果单独运行 `beta-diversity`，需要显式传：
+The full pipeline automatically generates `otus.tree` from `work\06_final\otus.fa`. If running `beta-diversity` standalone, you must explicitly provide:
 
 ```powershell
 --tree work\06_final\otus.tree
 ```
 
-### 10.5 可视化没有 PNG/PDF
+### 10.5 No PNG/PDF Visualization Output
 
-默认 `html` 不需要额外依赖。静态图需要：
+The default `html` format requires no additional dependencies. For static plots, install:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe -m pip install kaleido
 ```
 
-然后运行：
+Then run:
 
 ```powershell
 & .\.tools\python-3.13.13-amd64\python.exe process.py visualization-suite `
@@ -851,9 +853,9 @@ work\06_final\run_summary.json
   --format all
 ```
 
-### 10.6 什么时候用 Agent，什么时候用 CLI
+### 10.6 When to Use the Agent vs. the CLI
 
-- 想稳定复现或写脚本：优先用 `process.py`。
-- 想让系统根据自然语言选择步骤、解释结果或自动生成图表：用 `agent_cli.py`。
-- 想验证能否开跑：用 `check-pipeline-config`。
-- 想汇总已经完成的运行：读 `run_summary.json`，再按需运行 `visualization-suite`。
+- For stable reproduction or scripting: prefer `process.py`.
+- To let the system choose steps, interpret results, or automatically generate charts based on natural language: use `agent_cli.py`.
+- To verify everything is ready before a run: use `check-pipeline-config`.
+- To summarize a completed run: read `run_summary.json`, then run `visualization-suite` as needed.
