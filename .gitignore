@@ -8,6 +8,9 @@ databases.yaml
 .tools/
 .pip-tmp/
 .pip-work/
+.pip-dryrun-*/
+.pip-install-*/
+.npm-cache/
 
 # Python caches and build artifacts
 __pycache__/
@@ -21,10 +24,18 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+webui/frontend/node_modules/
+webui/frontend/.vite/
+webui/frontend/dist/
+webui/frontend/*.tsbuildinfo
+webui/frontend/vite.config.js
+webui/frontend/vite.config.d.ts
 
 # X-Amplicon generated outputs and runtime state
 work/
 run_logs/
+.xamplicon_webui/
+pipeline_params.webui.yaml
 analysis_report.md
 run_agent.bat
 run_process.bat

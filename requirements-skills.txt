@@ -6,5 +6,7 @@ biopython
 llama-index
 deepeval
 ragas
+# Keep this compatible with litellm's pinned openai dependency.
+langchain-openai==1.1.0
 opentelemetry-api
 opentelemetry-sdk

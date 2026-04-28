@@ -12,6 +12,7 @@
       - otherwise create and use a local .venv from an existing Python 3.10+;
       - install Python dependencies;
       - optionally install Agent skill dependencies;
+      - optionally install local Web UI dependencies;
       - copy .env.example to .env when .env is missing;
       - check external binaries and reference databases;
       - create simple run_agent.bat and run_process.bat launchers;
@@ -30,6 +31,9 @@
     powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallSkillDeps
 
 .EXAMPLE
+    powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallWebUIDeps
+
+.EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -DiagnosticsOnly
 
 .EXAMPLE
@@ -43,6 +47,7 @@ param(
     [switch]$SkipDependencyInstall,
     [switch]$InstallStaticExport,
     [switch]$InstallSkillDeps,
+    [switch]$InstallWebUIDeps,
     [switch]$SkipConfigCheck,
     [switch]$NoLauncher,
     [switch]$DiagnosticsOnly,
@@ -74,6 +79,7 @@ $script:Diagnostics = [ordered]@{
         skip_dependency_install = [bool]$SkipDependencyInstall
         install_static_export = [bool]$InstallStaticExport
         install_skill_deps = [bool]$InstallSkillDeps
+        install_webui_deps = [bool]$InstallWebUIDeps
         skip_config_check = [bool]$SkipConfigCheck
         no_launcher = [bool]$NoLauncher
         diagnostics_only = [bool]$DiagnosticsOnly
@@ -288,6 +294,17 @@ function Install-Dependencies {
                 Write-Warn "requirements-skills.txt was not found; skipping optional Agent skill dependencies."
             }
         }
+        if ($InstallWebUIDeps) {
+            $webuiRequirementsPath = Join-Path $ProjectRoot "requirements-webui.txt"
+            if (Test-Path -LiteralPath $webuiRequirementsPath) {
+                Write-Step "Installing optional Web UI dependencies from requirements-webui.txt"
+                $webuiInstallArgs = @("-m", "pip", "install") + $indexArgs + @("-r", $webuiRequirementsPath)
+                Invoke-Checked -FilePath $PythonExe -Arguments $webuiInstallArgs -FailureMessage "Optional Web UI dependency installation failed."
+            }
+            else {
+                Write-Warn "requirements-webui.txt was not found; skipping optional Web UI dependencies."
+            }
+        }
         return
     }
 
@@ -320,6 +337,15 @@ function Install-Dependencies {
         )
     }
 
+    if ($InstallWebUIDeps) {
+        $packages += @(
+            "fastapi",
+            "uvicorn[standard]",
+            "python-multipart",
+            "aiofiles"
+        )
+    }
+
     $installArgs = @("-m", "pip", "install") + $indexArgs + $packages
     Invoke-Checked -FilePath $PythonExe -Arguments $installArgs -FailureMessage "Dependency installation failed."
 }
@@ -331,12 +357,16 @@ function Test-PythonImports {
     )
 
     Write-Step "Running Python import smoke test"
+    $webuiImportModules = ""
+    if ($InstallWebUIDeps) {
+        $webuiImportModules = ", 'fastapi', 'uvicorn'"
+    }
 $code = @"
 import importlib
 import importlib.util
 modules = [
     'click', 'pandas', 'numpy', 'scipy', 'skbio', 'yaml', 'Bio',
-    'pydantic', 'plotly', 'rich', 'agent_cli', 'process'
+    'pydantic', 'plotly', 'rich'$webuiImportModules, 'agent_cli', 'process'
 ]
 spec_modules = ['litellm']
 missing = []
