@@ -1197,7 +1197,7 @@ def run_raw_amplicon_pipeline(
     feature_method: str = FEATURE_METHOD_ASV,
     feature_identity: float = 0.97,
     chimera_mode: str = "ref",
-    reference_db: str = "databas/rdp_16s_v18.fa",
+    reference_db: str = "database/rdp_16s_v18.fa",
     otutab_method: str = "usearch",
     otutab_identity: float = 0.97,
     annotation_database: str = "rdp_16s_v18",

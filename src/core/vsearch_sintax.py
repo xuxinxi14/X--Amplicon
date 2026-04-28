@@ -24,7 +24,7 @@ from .workflow_common import (
 )
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DATABASE_DIRECTORY = os.path.join(PROJECT_ROOT, "databas")
+DATABASE_DIRECTORY = os.path.join(PROJECT_ROOT, "database")
 DATABASE_FILE_MAP = {
     name: os.path.basename(str(record["sequence_path"]))
     for name, record in BUILTIN_DATABASES.items()

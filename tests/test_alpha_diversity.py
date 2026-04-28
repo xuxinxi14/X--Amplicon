@@ -15,7 +15,7 @@ from src.core.alpha_diversity import (
 )
 
 try:
-    from skbio.diversity.alpha import ace, chao1, shannon, simpson, sobs
+    from skbio.diversity.alpha import ace, chao1, inv_simpson, shannon, simpson, sobs
 
     SKBIO_AVAILABLE = True
 except ModuleNotFoundError:
@@ -39,24 +39,26 @@ class AlphaDiversityTests(unittest.TestCase):
 
         self.assertEqual(
             list(result.columns),
-            ["Observed_OTUs", "Shannon", "Simpson", "Chao1", "ACE"],
+            ["richness", "chao1", "ACE", "shannon", "simpson", "invsimpson"],
         )
         self.assertEqual(result.index.name, "SampleID")
 
         sample_1 = np.array([1, 1, 2], dtype=np.int64)
         sample_2 = np.array([0, 3, 1], dtype=np.int64)
 
-        self.assertAlmostEqual(result.loc["S1", "Observed_OTUs"], float(sobs(sample_1)))
-        self.assertAlmostEqual(result.loc["S1", "Shannon"], float(shannon(sample_1)))
-        self.assertAlmostEqual(result.loc["S1", "Simpson"], float(simpson(sample_1)))
-        self.assertAlmostEqual(result.loc["S1", "Chao1"], float(chao1(sample_1)))
+        self.assertAlmostEqual(result.loc["S1", "richness"], float(sobs(sample_1)))
+        self.assertAlmostEqual(result.loc["S1", "chao1"], float(chao1(sample_1)))
         self.assertAlmostEqual(result.loc["S1", "ACE"], float(ace(sample_1)))
+        self.assertAlmostEqual(result.loc["S1", "shannon"], float(shannon(sample_1)))
+        self.assertAlmostEqual(result.loc["S1", "simpson"], float(simpson(sample_1)))
+        self.assertAlmostEqual(result.loc["S1", "invsimpson"], float(inv_simpson(sample_1)))
 
-        self.assertAlmostEqual(result.loc["S2", "Observed_OTUs"], float(sobs(sample_2)))
-        self.assertAlmostEqual(result.loc["S2", "Shannon"], float(shannon(sample_2)))
-        self.assertAlmostEqual(result.loc["S2", "Simpson"], float(simpson(sample_2)))
-        self.assertAlmostEqual(result.loc["S2", "Chao1"], float(chao1(sample_2)))
+        self.assertAlmostEqual(result.loc["S2", "richness"], float(sobs(sample_2)))
+        self.assertAlmostEqual(result.loc["S2", "chao1"], float(chao1(sample_2)))
         self.assertAlmostEqual(result.loc["S2", "ACE"], float(ace(sample_2)))
+        self.assertAlmostEqual(result.loc["S2", "shannon"], float(shannon(sample_2)))
+        self.assertAlmostEqual(result.loc["S2", "simpson"], float(simpson(sample_2)))
+        self.assertAlmostEqual(result.loc["S2", "invsimpson"], float(inv_simpson(sample_2)))
 
     def test_calculate_rarefaction_curve_fills_empty_rows_with_zero(self) -> None:
         np.random.seed(0)
@@ -69,7 +71,7 @@ class AlphaDiversityTests(unittest.TestCase):
         )
 
         result = calculate_rarefaction_curve(otutab, [1, 3, 4])
-        metric_columns = ["Observed_OTUs", "Shannon", "Simpson", "Chao1", "ACE"]
+        metric_columns = ["richness", "chao1", "ACE", "shannon", "simpson", "invsimpson"]
 
         self.assertEqual(len(result), 6)
         self.assertFalse(result[metric_columns].isna().to_numpy().any())
@@ -94,7 +96,7 @@ class AlphaDiversityTests(unittest.TestCase):
 
         alpha_result = calculate_alpha_diversity(otutab)
         rarefaction_result = calculate_rarefaction_curve(otutab, [3, 4])
-        metric_columns = ["Observed_OTUs", "Shannon", "Simpson", "Chao1", "ACE"]
+        metric_columns = ["richness", "chao1", "ACE", "shannon", "simpson", "invsimpson"]
 
         sample_1_full_depth = rarefaction_result.loc[
             (rarefaction_result["SampleID"] == "S1") & (rarefaction_result["Depth"] == 3),

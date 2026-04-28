@@ -370,7 +370,7 @@ def _load_pipeline_params(params_path: str) -> dict[str, object]:
         "reference_db": _get_optional_config_value(
             config,
             "reference_db",
-            "databas/rdp_16s_v18.fa",
+            "database/rdp_16s_v18.fa",
         ),
         "otutab_method": _get_optional_config_value(config, "otutab_method", "usearch"),
         "otutab_identity": _get_optional_float_config_value(
@@ -1566,7 +1566,7 @@ def check_pipeline_config(params_path: str) -> None:
 )
 @click.option(
     "--reference-db",
-    default="databas/rdp_16s_v18.fa",
+    default="database/rdp_16s_v18.fa",
     show_default=True,
     type=click.Path(exists=True, dir_okay=False, readable=True, path_type=str),
     help="Reference FASTA used by the uchime_ref stage when chimera mode is ref.",

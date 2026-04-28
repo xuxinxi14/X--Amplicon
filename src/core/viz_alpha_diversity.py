@@ -363,7 +363,7 @@ def plot_alpha_rarefaction_curve(
         id_vars=["Depth"],
         value_vars=sample_columns,
         var_name="SampleID",
-        value_name="Observed_OTUs",
+        value_name="richness",
     )
     sample_meta = build_sample_metadata(
         sample_columns,
@@ -383,14 +383,14 @@ def plot_alpha_rarefaction_curve(
     fig = px.line(
         long_table,
         x="Depth",
-        y="Observed_OTUs",
+        y="richness",
         color="Group",
         line_group="SampleID",
         hover_data=["SampleID"],
         category_orders={"Group": group_order},
         color_discrete_map=color_map,
         title="Alpha Rarefaction Curve",
-        labels={"Observed_OTUs": "Observed OTUs"},
+        labels={"richness": "richness"},
         width=1050,
         height=650,
     )

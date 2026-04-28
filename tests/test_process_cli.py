@@ -112,7 +112,8 @@ class ProcessCliTests(unittest.TestCase):
 
             alpha_table = pd.read_csv(alpha_path, sep="\t", index_col=0)
             rarefaction_table = pd.read_csv(rarefaction_path, sep="\t")
-            self.assertIn("Observed_OTUs", alpha_table.columns)
+            self.assertIn("richness", alpha_table.columns)
+            self.assertIn("invsimpson", alpha_table.columns)
             self.assertIn("Depth", rarefaction_table.columns)
         finally:
             rmtree(temp_path, ignore_errors=True)

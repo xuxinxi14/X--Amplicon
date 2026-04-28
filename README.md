@@ -69,7 +69,7 @@ Before running real data, make sure these local resources exist:
 | Paired FASTQ directory | `seq\` or a user-defined directory | Full raw FASTQ pipeline |
 | USEARCH executable | `bin\windows\usearch.exe` or `usearch_path` | ASV/OTU steps and some table utilities |
 | VSEARCH executable | `bin\windows\vsearch.exe` or `vsearch_path` | OTU clustering, chimera checking, SINTAX annotation |
-| RDP/SILVA FASTA database | `databas\rdp_16s_v18.fa`, `databas\silva_16s_v123.fa`, or a registered database | Chimera checking and taxonomy annotation |
+| RDP/SILVA FASTA database | `database\rdp_16s_v18.fa`, `database\silva_16s_v123.fa`, or a registered database | Chimera checking and taxonomy annotation |
 
 Minimal end-to-end command sequence:
 
@@ -227,7 +227,7 @@ X-Amplicon/
     windows/
       usearch.exe
       vsearch.exe
-  databas/
+  database/
     rdp_16s_v18.fa
 ```
 
@@ -535,7 +535,7 @@ Terminal usage:
 python process.py vsearch-uchime-ref `
   --input work\04_features\otus.fa `
   --output work\04_features `
-  --reference-db databas\rdp_16s_v18.fa `
+  --reference-db database\rdp_16s_v18.fa `
   --chimera-mode ref `
   --threads 4
 ```
@@ -621,6 +621,10 @@ Primary inputs: OTU table.
 
 Primary outputs: Rarefied OTU table, alpha diversity table, and stats file.
 
+The alpha diversity table follows the EasyAmplicon `vegan.txt` column convention:
+`SampleID`, `richness`, `chao1`, `ACE`, `shannon`, `simpson`, and `invsimpson`.
+`chao1` is calculated by the Python/scikit-bio implementation used by X-Amplicon.
+
 Terminal usage:
 
 ```powershell
@@ -640,6 +644,9 @@ Purpose: Calculate alpha diversity from an OTU table; optionally generate a rare
 Primary inputs: OTU table.
 
 Primary outputs: Alpha diversity TSV; optional rarefaction TSV.
+
+The alpha diversity TSV uses the same EasyAmplicon-compatible columns:
+`SampleID`, `richness`, `chao1`, `ACE`, `shannon`, `simpson`, and `invsimpson`.
 
 Terminal usage:
 
@@ -886,7 +893,7 @@ The report separates computational summaries from biological interpretation. The
 
 Purpose: Manage reference database metadata so runs can report the actual database name, version, taxonomy format, path, and SHA-256 hash.
 
-Primary inputs: `databases.yaml` and local FASTA files under `databas\` or another user-selected directory.
+Primary inputs: `databases.yaml` and local FASTA files under `database\` or another user-selected directory.
 
 Primary outputs: Terminal check reports and an optional `databases.yaml` registry. `databases.yaml` is local and gitignored; use `databases.example.yaml` as the portable template.
 
@@ -900,7 +907,7 @@ Check one database by name, alias, or path:
 
 ```powershell
 python process.py check-database rdp_16s_v18
-python process.py check-database databas\rdp_16s_v18.fa --no-hash
+python process.py check-database database\rdp_16s_v18.fa --no-hash
 ```
 
 Register a custom SINTAX database:
@@ -908,7 +915,7 @@ Register a custom SINTAX database:
 ```powershell
 python process.py register-database `
   --name custom_16s `
-  --path databas\custom_16s.fa `
+  --path database\custom_16s.fa `
   --version 2026-04 `
   --taxonomy-format sintax `
   --alias custom16s
@@ -1134,14 +1141,17 @@ Default built-in compatibility records:
 
 | File | Purpose |
 | --- | --- |
-| `databas/rdp_16s_v18.fa` | Chimera removal and SINTAX annotation |
-| `databas/silva_16s_v123.fa` | Optional SINTAX annotation database |
+| `database/rdp_16s_v18.fa` | Bundled small RDP reference for chimera removal and SINTAX annotation |
+| `database/silva_16s_v123.fa` | Optional local SILVA SINTAX annotation database |
 
-Large FASTA files are not tracked by Git. Copy `databases.example.yaml` to `databases.yaml` when you want to pin database version, taxonomy format, aliases, and SHA-256 checksums for a local machine:
+The small RDP FASTA is bundled for convenient first runs. Large or custom FASTA
+files should normally stay outside Git history. Copy `databases.example.yaml` to
+`databases.yaml` when you want to pin database version, taxonomy format, aliases,
+and SHA-256 checksums for a local machine:
 
 ```powershell
 copy databases.example.yaml databases.yaml
-python process.py register-database --name rdp_16s_v18 --path databas\rdp_16s_v18.fa --version v18 --overwrite
+python process.py register-database --name rdp_16s_v18 --path database\rdp_16s_v18.fa --version v18 --overwrite
 python process.py check-database rdp_16s_v18
 ```
 
@@ -1364,6 +1374,6 @@ run_logs/windows_setup_diagnostics.json
 ```
 
 Public GitHub releases should not include `.env`, `work\`, `run_logs\`, `seq\`,
-`databas\`, `bin\`, `.venv\`, or `.tools\`. Private lab bundles may include
+`database\`, `bin\`, `.venv\`, or `.tools\`. Private lab bundles may include
 database and executable folders only when licensing and local policy allow it.
 

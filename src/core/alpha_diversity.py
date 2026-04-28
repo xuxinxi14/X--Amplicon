@@ -14,18 +14,19 @@ DEFAULT_RAREFACTION_PERCENTAGES = tuple(range(1, 101))
 
 def _load_alpha_metrics() -> dict[str, AlphaMetric]:
     try:
-        from skbio.diversity.alpha import ace, chao1, shannon, simpson, sobs
+        from skbio.diversity.alpha import ace, chao1, inv_simpson, shannon, simpson, sobs
     except ModuleNotFoundError as exc:
         raise ImportError(
             "scikit-bio is required for alpha diversity calculations."
         ) from exc
 
     return {
-        "Observed_OTUs": sobs,
-        "Shannon": shannon,
-        "Simpson": simpson,
-        "Chao1": chao1,
+        "richness": sobs,
+        "chao1": chao1,
         "ACE": ace,
+        "shannon": shannon,
+        "simpson": simpson,
+        "invsimpson": inv_simpson,
     }
 
 
@@ -221,7 +222,7 @@ def calculate_richness_rarefaction_curve(
     """
 
     counts = _validate_otutab(otutab)
-    observed_metric = _load_alpha_metrics()["Observed_OTUs"]
+    observed_metric = _load_alpha_metrics()["richness"]
 
     resolved_percentages: list[int] = []
     for percentage in percentages:
@@ -272,8 +273,9 @@ def calculate_alpha_diversity(otutab: pd.DataFrame) -> pd.DataFrame:
         otutab: OTU table with OTU IDs as rows and sample IDs as columns.
 
     Returns:
-        A DataFrame indexed by sample ID. Columns contain `Observed_OTUs`,
-        `Shannon`, `Simpson`, `Chao1`, and `ACE`.
+        A DataFrame indexed by sample ID. Columns use the EasyAmplicon
+        `vegan.txt` convention: `richness`, `chao1`, `ACE`, `shannon`,
+        `simpson`, and `invsimpson`.
     """
 
     counts = _validate_otutab(otutab)
@@ -301,9 +303,9 @@ def calculate_rarefaction_curve(
 
     Returns:
         A long-format DataFrame with one row per sample-depth pair. Columns are
-        `SampleID`, `Depth`, `Observed_OTUs`, `Shannon`, `Simpson`, `Chao1`,
-        and `ACE`. Each depth is estimated from repeated no-replacement
-        rarefactions, and empty results are filled with `0.0`.
+        `SampleID`, `Depth`, `richness`, `chao1`, `ACE`, `shannon`,
+        `simpson`, and `invsimpson`. Each depth is estimated from repeated
+        no-replacement rarefactions, and empty results are filled with `0.0`.
     """
 
     counts = _validate_otutab(otutab)

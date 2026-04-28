@@ -32,16 +32,24 @@ BUILTIN_DATABASES: dict[str, dict[str, Any]] = {
         "taxonomy_format": "sintax",
         "type": "taxonomy_annotation",
         "roles": ["taxonomy_annotation", "chimera_reference"],
-        "sequence_path": os.path.join("databas", "rdp_16s_v18.fa"),
-        "aliases": ["rdp", "rdp_16s_v18.fa"],
+        "sequence_path": os.path.join("database", "rdp_16s_v18.fa"),
+        "aliases": [
+            "rdp",
+            "rdp_16s_v18.fa",
+            os.path.join("databas", "rdp_16s_v18.fa"),
+        ],
     },
     "silva_16s_v123": {
         "version": "v123",
         "taxonomy_format": "sintax",
         "type": "taxonomy_annotation",
         "roles": ["taxonomy_annotation"],
-        "sequence_path": os.path.join("databas", "silva_16s_v123.fa"),
-        "aliases": ["silva", "silva_16s_v123.fa"],
+        "sequence_path": os.path.join("database", "silva_16s_v123.fa"),
+        "aliases": [
+            "silva",
+            "silva_16s_v123.fa",
+            os.path.join("databas", "silva_16s_v123.fa"),
+        ],
     },
 }
 

@@ -20,7 +20,7 @@ from .workflow_common import (
 )
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-DEFAULT_RDP_REFERENCE_DB = os.path.join(PROJECT_ROOT, "databas", "rdp_16s_v18.fa")
+DEFAULT_RDP_REFERENCE_DB = os.path.join(PROJECT_ROOT, "database", "rdp_16s_v18.fa")
 FALLBACK_VSEARCH_UCHIME_REF_DEFAULTS = {
     "reference_db": DEFAULT_RDP_REFERENCE_DB,
     "chimera_mode": "ref",

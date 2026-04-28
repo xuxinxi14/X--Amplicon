@@ -45,8 +45,20 @@ from .viz_common import (
 def _generate_group_colors(
     groups: Sequence[str],
     color_palette: str | Sequence[str] | dict[str, str] | None = None,
+    default_mapping: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    return resolve_color_palette(groups, color_palette=color_palette)
+    return resolve_color_palette(
+        groups,
+        color_palette=color_palette,
+        default_mapping=default_mapping,
+    )
+
+
+BETA_ORDINATION_GROUP_COLORS = {
+    "WT": "#F8766D",
+    "KO": "#00BA38",
+    "OE": "#619CFF",
+}
 
 
 def _pcoa(distance_matrix: pd.DataFrame, n_components: int = 2) -> tuple[pd.DataFrame, np.ndarray, np.ndarray]:
@@ -76,6 +88,21 @@ def _pcoa(distance_matrix: pd.DataFrame, n_components: int = 2) -> tuple[pd.Data
     coords = pd.DataFrame(coordinates, index=distance_matrix.index.astype(str), columns=columns)
     coords.index.name = "SampleID"
     return coords, explained, eigvals
+
+
+def _orient_pcoa_coordinates(coords: pd.DataFrame) -> pd.DataFrame:
+    """Use a stable axis sign convention for R/EasyAmplicon-like PCoA plots."""
+
+    oriented = coords.copy()
+    for column in [column for column in oriented.columns if column.startswith("PCoA")]:
+        values = oriented[column].to_numpy(dtype=float)
+        finite = np.where(np.isfinite(values))[0]
+        if finite.size == 0:
+            continue
+        reference_index = finite[np.argmax(np.abs(values[finite]))]
+        if values[reference_index] > 0:
+            oriented[column] = -oriented[column]
+    return oriented
 
 
 def _ellipse_trace(
@@ -124,7 +151,11 @@ def _build_ordination_figure(
     color_palette: str | Sequence[str] | dict[str, str] | None = None,
 ) -> go.Figure:
     group_order = sort_groups(plot_df["Group"].astype(str).tolist())
-    group_colors = _generate_group_colors(group_order, color_palette=color_palette)
+    group_colors = _generate_group_colors(
+        group_order,
+        color_palette=color_palette,
+        default_mapping=BETA_ORDINATION_GROUP_COLORS,
+    )
     fig = go.Figure()
     for group in group_order:
         group_df = plot_df.loc[plot_df["Group"].astype(str) == group].copy()
@@ -217,6 +248,7 @@ def plot_beta_pcoa(
     for metric, path in file_map.items():
         distance_matrix = read_distance_matrix(path, metric)
         coords, explained, _eigvals = _pcoa(distance_matrix, n_components=2)
+        coords = _orient_pcoa_coordinates(coords)
         sample_meta = build_sample_metadata(
             coords.index.tolist(),
             metadata_path=metadata_path,

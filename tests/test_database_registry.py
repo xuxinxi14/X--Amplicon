@@ -35,7 +35,7 @@ class DatabaseRegistryTests(unittest.TestCase):
 
         self.assertEqual(record["name"], "rdp_16s_v18")
         self.assertEqual(record["taxonomy_format"], "sintax")
-        self.assertTrue(str(record["path"]).endswith(str(Path("databas") / "rdp_16s_v18.fa")))
+        self.assertTrue(str(record["path"]).endswith(str(Path("database") / "rdp_16s_v18.fa")))
 
     def test_register_and_resolve_database(self) -> None:
         fasta_path = self.temp_path / "custom.fa"

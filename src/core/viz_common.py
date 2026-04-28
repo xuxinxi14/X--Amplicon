@@ -47,11 +47,18 @@ DEFAULT_BETA_METRICS = (
     "weighted_unifrac",
 )
 ALPHA_METRIC_ALIASES = {
-    "Observed_OTUs": ("Observed_OTUs", "Observed", "richness", "ObservedOTUs"),
-    "Shannon": ("Shannon", "shannon"),
-    "Simpson": ("Simpson", "simpson"),
-    "Chao1": ("Chao1", "chao1"),
+    "richness": ("richness", "Observed_OTUs", "Observed", "ObservedOTUs", "sobs"),
+    "chao1": ("chao1", "Chao1"),
     "ACE": ("ACE", "ace"),
+    "shannon": ("shannon", "Shannon"),
+    "simpson": ("simpson", "Simpson"),
+    "invsimpson": (
+        "invsimpson",
+        "InvSimpson",
+        "InverseSimpson",
+        "inverse_simpson",
+        "inv_simpson",
+    ),
 }
 DEFAULT_ALPHA_METRICS = tuple(ALPHA_METRIC_ALIASES)
 SUMMARY_COLUMNS = {"all", "total", "sum", "overall"}
@@ -722,21 +729,40 @@ def normalize_alpha_table(alpha_path: str) -> pd.DataFrame:
     table = table.rename(columns={first_column: "SampleID"}).copy()
     table["SampleID"] = table["SampleID"].astype(str).str.strip()
 
+    lower_to_column = {
+        str(column).strip().lower(): column
+        for column in table.columns
+    }
     rename_map: dict[str, str] = {}
-    missing_metrics: list[str] = []
     for metric, aliases in ALPHA_METRIC_ALIASES.items():
-        matched = next((alias for alias in aliases if alias in table.columns), None)
-        if matched is None:
-            missing_metrics.append(metric)
-        else:
+        matched = next(
+            (
+                lower_to_column[str(alias).strip().lower()]
+                for alias in aliases
+                if str(alias).strip().lower() in lower_to_column
+            ),
+            None,
+        )
+        if matched is not None:
             rename_map[matched] = metric
+
+    table = table.rename(columns=rename_map).copy()
+    if "invsimpson" not in table.columns and "simpson" in table.columns:
+        simpson = pd.to_numeric(table["simpson"], errors="raise")
+        dominance = 1.0 - simpson
+        table["invsimpson"] = np.where(dominance > 0, 1.0 / dominance, 0.0)
+
+    missing_metrics = [
+        metric for metric in DEFAULT_ALPHA_METRICS
+        if metric not in table.columns
+    ]
     if missing_metrics:
         raise ValueError(
             "alpha_diversity is missing required metrics: "
             f"{missing_metrics}"
         )
 
-    normalized = table.rename(columns=rename_map).loc[:, ["SampleID", *DEFAULT_ALPHA_METRICS]].copy()
+    normalized = table.loc[:, ["SampleID", *DEFAULT_ALPHA_METRICS]].copy()
     if normalized["SampleID"].duplicated().any():
         duplicates = normalized.loc[normalized["SampleID"].duplicated(), "SampleID"].tolist()
         raise ValueError(f"alpha_diversity contains duplicate SampleID values: {duplicates[:8]}")

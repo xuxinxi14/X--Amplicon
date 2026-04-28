@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from agent.tools import get_tool_schemas
 from process import cli
 from src.core.viz_common import validate_output_format
-from src.core.viz_beta_diversity import plot_beta_cpcoa
+from src.core.viz_beta_diversity import plot_beta_cpcoa, plot_beta_pcoa
 from src.core.viz_pipeline import run_visualization_suite
 
 
@@ -148,6 +148,54 @@ class VisualizationToolTests(unittest.TestCase):
 
     def test_visualization_output_format_accepts_svg(self) -> None:
         self.assertEqual(validate_output_format("svg"), "svg")
+
+    def test_pcoa_uses_reference_orientation_and_colors(self) -> None:
+        temp_path = Path("tests") / f"tmp_pcoa_{uuid4().hex}"
+        try:
+            beta_dir = temp_path / "beta"
+            beta_dir.mkdir(parents=True, exist_ok=True)
+            metadata_path = temp_path / "metadata.txt"
+            output_dir = temp_path / "pcoa"
+
+            sample_ids = ["WT1", "KO1", "OE1", "WT2"]
+            coordinates = np.array(
+                [
+                    [0.0, 0.00],
+                    [1.0, 0.03],
+                    [2.0, -0.02],
+                    [3.0, 0.01],
+                ],
+                dtype=float,
+            )
+            distances = np.sqrt(((coordinates[:, None, :] - coordinates[None, :, :]) ** 2).sum(axis=2))
+            pd.DataFrame(distances, index=sample_ids, columns=sample_ids).to_csv(
+                beta_dir / "braycurtis.tsv",
+                sep="\t",
+                index_label="SampleID",
+            )
+            pd.DataFrame({"SampleID": sample_ids, "Group": ["WT", "KO", "OE", "WT"]}).to_csv(
+                metadata_path,
+                sep="\t",
+                index=False,
+            )
+
+            result = plot_beta_pcoa(
+                beta_dir=str(beta_dir),
+                metadata_path=str(metadata_path),
+                output_dir=str(output_dir),
+                metrics=["braycurtis"],
+                output_format="html",
+            )
+
+            coord_table = pd.read_csv(result["coordinates"], sep="\t")
+            axis1 = coord_table["Axis1"].to_numpy(dtype=float)
+            self.assertLess(axis1[np.argmax(np.abs(axis1))], 0)
+            html = (output_dir / "beta_pcoa_braycurtis.html").read_text(encoding="utf-8")
+            self.assertIn("#F8766D", html)
+            self.assertIn("#00BA38", html)
+            self.assertIn("#619CFF", html)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
 
     def test_cpcoa_keeps_sample_level_coordinates_within_groups(self) -> None:
         temp_path = Path("tests") / f"tmp_cpcoa_{uuid4().hex}"

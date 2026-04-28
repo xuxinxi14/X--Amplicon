@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-import math
 import os
 import random
-from collections import Counter
 from typing import Any, Dict, Optional
+
+import pandas as pd
 
 from src.utils.command_runner import run_command
 
+from .alpha_diversity import calculate_alpha_diversity
 from .workflow_common import (
     DEFAULT_USEARCH_WINDOWS_PATH,
     ensure_input_file,
@@ -95,100 +96,6 @@ def _rarefy_counts(
     return rarefied
 
 
-def _estimate_observed(counts: list[int]) -> int:
-    return sum(1 for value in counts if value > 0)
-
-
-def _estimate_chao1(counts: list[int]) -> float:
-    observed = _estimate_observed(counts)
-    singletons = sum(1 for value in counts if value == 1)
-    doubletons = sum(1 for value in counts if value == 2)
-    total = sum(counts)
-
-    if total <= 0:
-        return 0.0
-
-    if doubletons > 0:
-        correction = ((total - 1) / total) * (singletons * singletons) / (2 * doubletons)
-    else:
-        correction = ((total - 1) / total) * (singletons * (singletons - 1)) / 2
-
-    return observed + correction
-
-
-def _estimate_ace(counts: list[int], rare_threshold: int = 10) -> float:
-    abundance_counter = Counter(value for value in counts if value > 0)
-    observed = _estimate_observed(counts)
-    if observed == 0:
-        return 0.0
-
-    rare_species = sum(count for abundance, count in abundance_counter.items() if abundance <= rare_threshold)
-    abundant_species = sum(
-        count for abundance, count in abundance_counter.items() if abundance > rare_threshold
-    )
-    if rare_species == 0:
-        return float(abundant_species)
-
-    rare_individuals = sum(
-        abundance * count
-        for abundance, count in abundance_counter.items()
-        if abundance <= rare_threshold
-    )
-    singletons = abundance_counter.get(1, 0)
-    if rare_individuals == 0:
-        return float(observed)
-
-    coverage = 1.0 - (singletons / rare_individuals)
-    if coverage <= 0:
-        return float(observed)
-
-    numerator = sum(
-        abundance * (abundance - 1) * count
-        for abundance, count in abundance_counter.items()
-        if abundance <= rare_threshold
-    )
-    if rare_individuals <= 1:
-        gamma_square = 0.0
-    else:
-        gamma_square = (
-            (rare_species / coverage) * (numerator / (rare_individuals * (rare_individuals - 1)))
-        ) - 1.0
-        gamma_square = max(gamma_square, 0.0)
-
-    return abundant_species + (rare_species / coverage) + (singletons / coverage) * gamma_square
-
-
-def _estimate_shannon(counts: list[int]) -> float:
-    total = sum(counts)
-    if total <= 0:
-        return 0.0
-
-    value = 0.0
-    for count in counts:
-        if count <= 0:
-            continue
-        proportion = count / total
-        value -= proportion * math.log(proportion)
-    return value
-
-
-def _estimate_simpson(counts: list[int]) -> float:
-    total = sum(counts)
-    if total <= 0:
-        return 0.0
-    return 1.0 - sum((count / total) ** 2 for count in counts if count > 0)
-
-
-def _estimate_inverse_simpson(counts: list[int]) -> float:
-    total = sum(counts)
-    if total <= 0:
-        return 0.0
-    dominance = sum((count / total) ** 2 for count in counts if count > 0)
-    if dominance == 0:
-        return 0.0
-    return 1.0 / dominance
-
-
 def _write_rarefied_table(
     path: str,
     feature_ids: list[str],
@@ -207,21 +114,11 @@ def _write_alpha_table(
     sample_names: list[str],
     sample_counts: Dict[str, list[int]],
 ) -> None:
-    with open(path, "w", encoding="utf-8", newline="\n") as handle:
-        handle.write(
-            "SampleID\trichness\tchao1\tACE\tshannon\tsimpson\tinvsimpson\n"
-        )
-        for sample_name in sample_names:
-            counts = sample_counts[sample_name]
-            handle.write(
-                f"{sample_name}\t"
-                f"{_estimate_observed(counts)}\t"
-                f"{_estimate_chao1(counts):.6f}\t"
-                f"{_estimate_ace(counts):.6f}\t"
-                f"{_estimate_shannon(counts):.6f}\t"
-                f"{_estimate_simpson(counts):.6f}\t"
-                f"{_estimate_inverse_simpson(counts):.6f}\n"
-            )
+    otutab = pd.DataFrame(
+        {sample_name: sample_counts[sample_name] for sample_name in sample_names}
+    )
+    alpha = calculate_alpha_diversity(otutab).reset_index()
+    alpha.to_csv(path, sep="\t", index=False, encoding="utf-8", lineterminator="\n")
 
 
 def _write_discard_samples(path: str, sample_names: list[str]) -> None:

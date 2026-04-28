@@ -43,7 +43,7 @@ run_pipeline:
   chimera_mode: ref
 
   # 参考数据库路径。仅在 chimera_mode=ref 时使用。
-  reference_db: databas/rdp_16s_v18.fa
+  reference_db: database/rdp_16s_v18.fa
 
   # 生成原始 OTU/ASV 表的方法，可选 usearch、vsearch。
   otutab_method: usearch
