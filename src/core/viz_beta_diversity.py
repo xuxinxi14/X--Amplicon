@@ -322,9 +322,11 @@ def _run_cpcoa(distance_matrix: pd.DataFrame, groups: Sequence[str]) -> tuple[pd
     total = constrained + unconstrained
 
     centered_fitted = fitted - fitted.mean(axis=0, keepdims=True)
-    u, singular_values, _vt = np.linalg.svd(centered_fitted, full_matrices=False)
+    _u, singular_values, vt = np.linalg.svd(centered_fitted, full_matrices=False)
     variances = singular_values ** 2
-    axes = u[:, :2] * singular_values[:2]
+    response_centered = response - response.mean(axis=0, keepdims=True)
+    directions = vt.T[:, :2]
+    axes = response_centered.dot(directions) if directions.size else np.zeros((len(groups), 0))
     if axes.shape[1] < 2:
         axes = np.pad(axes, ((0, 0), (0, 2 - axes.shape[1])), mode="constant")
 
