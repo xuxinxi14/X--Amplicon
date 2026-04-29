@@ -9,32 +9,33 @@ The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequ
 ## Highlights
 
 - Local Windows Web UI for wet-lab users.
-- One-click Release package with bundled Python, RDP 16S database, USEARCH/VSEARCH, and prebuilt Web UI.
+- One-click Windows installer with bundled Python, RDP 16S database, USEARCH/VSEARCH, and prebuilt Web UI.
 - Guided Agent page for analysis readiness and step-by-step execution.
 - Deterministic `process.py` workflow for reproducibility and automation.
 - No-LLM mode for local checks, visualization, reports, and most guidance.
 - Optional LLM configuration from the Web UI: API key, API base URL, and model selection.
 - Outputs include Plotly charts, report HTML/Markdown, `run_summary.json`, and provenance files.
 
-## Quick Start: Windows Release
+## Quick Start: Windows Installer
 
-For most users, download the first Release asset:
+For most users, download the Windows installer from GitHub Releases:
 
 ```text
-X-Amplicon_main.zip
+X-Amplicon-Setup-v0.1.0.exe
 ```
 
 Then:
 
-1. Extract `X-Amplicon_main.zip`.
-2. Open the extracted `X-Amplicon_main` folder.
-3. Double-click:
+1. Double-click `X-Amplicon-Setup-v0.1.0.exe`.
+2. Follow the installer wizard. The default per-user install path is:
 
 ```text
-Start_X-Amplicon_WebUI.cmd
+%LOCALAPPDATA%\Programs\X-Amplicon
 ```
 
-The launcher checks the bundled Python environment, verifies the small RDP database, and opens the local Web UI. The default address is:
+3. Launch **X-Amplicon Web UI** from the Start Menu or desktop shortcut.
+
+The installed launcher checks the bundled Python environment, verifies the small RDP database, and opens the local Web UI. The default address is:
 
 ```text
 http://127.0.0.1:8765
@@ -42,9 +43,9 @@ http://127.0.0.1:8765
 
 If the browser does not open automatically, copy the printed address into your browser.
 
-### What The Release Package Includes
+### What The Installer Includes
 
-| Component | Included path |
+| Component | Installed path |
 | --- | --- |
 | Bundled Python runtime | `.tools\python-3.13.13-amd64\python.exe` |
 | Small 16S database | `database\rdp_16s_v18.fa` |
@@ -54,11 +55,11 @@ If the browser does not open automatically, copy the printed address into your b
 | Prebuilt Web UI frontend | `webui\frontend\dist\` |
 | One-click launchers | `Start_X-Amplicon_WebUI.cmd`, `Start_X-Amplicon_WebUI.ps1` |
 
-The Release package does not include user FASTQ data, analysis outputs, API keys, runtime state, `node_modules`, or large SILVA databases.
+The installer does not include user FASTQ data, analysis outputs, API keys, runtime state, `node_modules`, or large SILVA databases.
 
 ## Quick Start: Source Checkout
 
-If you use the GitHub source repository instead of the Release package, install dependencies first:
+If you use the GitHub source repository instead of the Windows installer, install dependencies first:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallWebUIDeps
@@ -101,7 +102,7 @@ The Web UI does not upload sequencing files. Data, logs, and results stay local.
 Typical project layout:
 
 ```text
-X-Amplicon_main\
+your_project\
   metadata.txt
   seq\
     S1_1.fq.gz
@@ -209,7 +210,7 @@ Useful slash commands include `/params`, `/status`, `/tools`, `/language`, `/rep
 
 ## Dependencies
 
-The Release package already includes the runtime needed for ordinary use. Source users need:
+The Windows installer already includes the runtime needed for ordinary use. Source users need:
 
 | Category | Packages or tools |
 | --- | --- |
@@ -233,7 +234,7 @@ If the default port is occupied:
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -Port 8770
 ```
 
-If a Release package dependency check fails and internet access is available:
+If an installed dependency check fails and internet access is available, open PowerShell in the installation directory and run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -RepairDeps

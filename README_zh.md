@@ -9,32 +9,33 @@ X-Amplicon 是一个面向 Windows 本地环境的 16S rRNA 扩增子分析 Agen
 ## 项目亮点
 
 - 面向湿实验用户的 Windows 本地 Web UI。
-- 一键 Release 包内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
+- 一键 Windows 安装器内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
 - Agent 页面提供分析前准备检查和分步引导。
 - `process.py` 提供可复现、可自动化的确定性工作流。
 - 无 LLM 模式下也可完成本地检查、可视化、报告生成和大部分帮助功能。
 - 可在 Web UI 中配置 LLM：API key、API base URL 和模型切换。
 - 输出包括 Plotly 图表、HTML/Markdown 报告、`run_summary.json` 和 provenance 文件。
 
-## 快速开始：Windows 发行包
+## 快速开始：Windows 安装器
 
-大多数用户推荐下载第一个 Release 资源：
+大多数用户推荐从 GitHub Releases 下载 Windows 安装器：
 
 ```text
-X-Amplicon_main.zip
+X-Amplicon-Setup-v0.1.0.exe
 ```
 
 使用步骤：
 
-1. 解压 `X-Amplicon_main.zip`。
-2. 打开解压后的 `X-Amplicon_main` 文件夹。
-3. 双击：
+1. 双击 `X-Amplicon-Setup-v0.1.0.exe`。
+2. 按安装向导完成安装。默认的当前用户安装目录是：
 
 ```text
-Start_X-Amplicon_WebUI.cmd
+%LOCALAPPDATA%\Programs\X-Amplicon
 ```
 
-启动器会检查内置 Python 环境、确认小型 RDP 数据库可用，并打开本地 Web UI。默认地址是：
+3. 从开始菜单或桌面快捷方式启动 **X-Amplicon Web UI**。
+
+安装后的启动器会检查内置 Python 环境、确认小型 RDP 数据库可用，并打开本地 Web UI。默认地址是：
 
 ```text
 http://127.0.0.1:8765
@@ -42,9 +43,9 @@ http://127.0.0.1:8765
 
 如果浏览器没有自动打开，把启动窗口中显示的地址复制到浏览器即可。
 
-### 发行包包含什么
+### 安装器包含什么
 
-| 内容 | 发行包路径 |
+| 内容 | 安装后路径 |
 | --- | --- |
 | 内置 Python 运行时 | `.tools\python-3.13.13-amd64\python.exe` |
 | 小型 16S 数据库 | `database\rdp_16s_v18.fa` |
@@ -54,11 +55,11 @@ http://127.0.0.1:8765
 | 已构建 Web UI 前端 | `webui\frontend\dist\` |
 | 一键启动脚本 | `Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1` |
 
-发行包不包含用户 FASTQ 数据、分析输出、API key、本地运行状态、`node_modules` 或大型 SILVA 数据库。
+安装器不包含用户 FASTQ 数据、分析输出、API key、本地运行状态、`node_modules` 或大型 SILVA 数据库。
 
 ## 快速开始：源码仓库
 
-如果使用 GitHub 源码而不是 Release 包，先安装依赖：
+如果使用 GitHub 源码而不是 Windows 安装器，先安装依赖：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallWebUIDeps
@@ -101,7 +102,7 @@ Web UI 不上传测序文件。数据、日志和结果都保留在本机。
 典型项目目录：
 
 ```text
-X-Amplicon_main\
+your_project\
   metadata.txt
   seq\
     S1_1.fq.gz
@@ -209,7 +210,7 @@ python agent_cli.py --offline
 
 ## 依赖
 
-Release 包已经包含普通使用所需运行环境。源码用户需要：
+Windows 安装器已经包含普通使用所需运行环境。源码用户需要：
 
 | 类别 | 包或工具 |
 | --- | --- |
@@ -233,7 +234,7 @@ powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -Port 8770
 ```
 
-如果 Release 包依赖检查失败，且电脑可以联网：
+如果安装后的依赖检查失败，且电脑可以联网，请在安装目录中打开 PowerShell 并运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -RepairDeps
