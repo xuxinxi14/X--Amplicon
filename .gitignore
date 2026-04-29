@@ -39,6 +39,8 @@ pipeline_params.webui.yaml
 analysis_report.md
 run_agent.bat
 run_process.bat
+X-Amplicon_main/
+X-Amplicon_main.zip
 
 # Local sequencing data and sample-specific metadata
 seq/
