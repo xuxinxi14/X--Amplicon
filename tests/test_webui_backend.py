@@ -17,7 +17,7 @@ from webui.backend.models.project import PipelineParamsDraft, ProjectRecord
 from webui.backend.models.settings import WebUISettings
 from webui.backend.services import command_builder
 from webui.backend.services.fastq_pairing import preview_fastq_pairs
-from webui.backend.services.file_service import read_text_file, resolve_authorized_path
+from webui.backend.services.file_service import read_text_file, resolve_authorized_path, rewrite_html_links_for_file_view
 from webui.backend.services.job_manager import JobManager
 from webui.backend.services.metadata_validator import validate_metadata
 from webui.backend.services.params_writer import write_pipeline_params
@@ -107,6 +107,27 @@ class WebUIBackendServiceTests(unittest.TestCase):
         self.assertIn("--params", command.args)
         self.assertNotIn("&&", command.display)
 
+        viz_command = command_builder.visualization_suite(
+            str(self.temp_path / "work" / "06_final"),
+            metadata=str(metadata_path),
+            sample_id_col="SampleID",
+            group_col="Group",
+            settings=settings,
+        )
+        self.assertIn("visualization-suite", viz_command.args)
+        self.assertIn("--sample-id-col", viz_command.args)
+        self.assertIn("--group-col", viz_command.args)
+
+        diff_command = command_builder.differential_abundance(
+            otutab=str(self.temp_path / "work" / "06_final" / "otutab.txt"),
+            metadata=str(metadata_path),
+            output_dir=str(self.temp_path / "work" / "06_final" / "statistics" / "differential"),
+            comparisons=["KO:WT"],
+            settings=settings,
+        )
+        self.assertIn("--output-dir", diff_command.args)
+        self.assertIn("--compare", diff_command.args)
+
     def test_result_indexer_finds_plots_reports_and_differential_outputs(self) -> None:
         final_dir = self.temp_path / "work" / "06_final"
         alpha_dir = final_dir / "plots" / "alpha_boxplot_chart"
@@ -166,6 +187,30 @@ class WebUIBackendServiceTests(unittest.TestCase):
         settings = WebUISettings(authorized_dirs=[str(outside_root)])
         self.assertEqual(resolve_authorized_path(str(outside_path), settings=settings), outside_path.resolve())
 
+    def test_html_file_view_rewrites_relative_report_links(self) -> None:
+        final_dir = self.temp_path / "work" / "06_final"
+        report_dir = final_dir / "report"
+        plots_dir = final_dir / "plots"
+        report_dir.mkdir(parents=True)
+        plots_dir.mkdir(parents=True)
+        (plots_dir / "index.html").write_text("<html>plots</html>", encoding="utf-8")
+        source = report_dir / "analysis_report.html"
+        source.write_text(
+            '<iframe src="../plots/index.html"></iframe>'
+            '<a href="../plots/index.html#top">plot</a>'
+            '<a href="https://example.org">external</a>'
+            '<script src="/assets/app.js"></script>',
+            encoding="utf-8",
+        )
+
+        rewritten = rewrite_html_links_for_file_view(source.read_text(encoding="utf-8"), source_path=source)
+
+        self.assertIn("/api/files/view?path=", rewritten)
+        self.assertIn("plots%5Cindex.html", rewritten)
+        self.assertIn("#top", rewritten)
+        self.assertIn('href="https://example.org"', rewritten)
+        self.assertIn('src="/assets/app.js"', rewritten)
+
     def test_job_manager_runs_short_command_and_records_logs(self) -> None:
         jobs_dir = self.temp_path / "jobs"
         job_manager = JobManager()
@@ -192,6 +237,47 @@ class WebUIBackendServiceTests(unittest.TestCase):
         self.assertEqual(latest.status, "completed")
         self.assertEqual(latest.return_code, 0)
         self.assertIn("webui-job-ok", logs["text"])
+
+    def test_job_manager_runs_sequence_job_and_records_step_logs(self) -> None:
+        jobs_dir = self.temp_path / "jobs"
+        job_manager = JobManager()
+        commands = [
+            (
+                "first",
+                CommandSpec(
+                    args=[sys.executable, "-c", "print('sequence-one')"],
+                    display="sequence first",
+                    cwd=str(self.temp_path.resolve()),
+                ),
+            ),
+            (
+                "second",
+                CommandSpec(
+                    args=[sys.executable, "-c", "print('sequence-two')"],
+                    display="sequence second",
+                    cwd=str(self.temp_path.resolve()),
+                ),
+            ),
+        ]
+
+        with patch("webui.backend.services.job_manager.get_jobs_dir", return_value=jobs_dir):
+            record = job_manager.start_sequence_job(job_type="sequence", commands=commands, project_id="project-1")
+            deadline = time.time() + 10
+            while time.time() < deadline:
+                latest = job_manager.get_job(record.id)
+                if latest.status in {"completed", "failed", "cancelled"}:
+                    break
+                time.sleep(0.05)
+            else:
+                self.fail("Short Web UI sequence job did not finish in time.")
+
+            latest = job_manager.get_job(record.id)
+            logs = job_manager.get_logs(record.id)
+
+        self.assertEqual(latest.status, "completed")
+        self.assertEqual(latest.return_code, 0)
+        self.assertIn("sequence-one", logs["text"])
+        self.assertIn("sequence-two", logs["text"])
 
 
 if __name__ == "__main__":

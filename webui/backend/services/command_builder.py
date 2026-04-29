@@ -39,6 +39,8 @@ def visualization_suite(
     *,
     output_format: str = "html",
     metadata: str | None = None,
+    sample_id_col: str = "SampleID",
+    group_col: str = "Group",
     color_palette: str | None = None,
     settings: WebUISettings | None = None,
 ) -> CommandSpec:
@@ -50,6 +52,10 @@ def visualization_suite(
         final_dir,
         "--format",
         output_format,
+        "--sample-id-col",
+        sample_id_col,
+        "--group-col",
+        group_col,
     ]
     if metadata:
         args.extend(["--metadata", metadata])
@@ -62,6 +68,7 @@ def differential_abundance(
     *,
     otutab: str,
     metadata: str,
+    output_dir: str | None = None,
     taxonomy: str | None = None,
     comparisons: list[str] | None = None,
     reference_group: str | None = None,
@@ -85,6 +92,8 @@ def differential_abundance(
         "--sample-id-col",
         sample_id_col,
     ]
+    if output_dir:
+        args.extend(["--output-dir", output_dir])
     if taxonomy:
         args.extend(["--taxonomy", taxonomy])
     for comparison in comparisons or []:

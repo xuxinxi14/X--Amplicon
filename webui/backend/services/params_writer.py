@@ -82,9 +82,15 @@ def write_pipeline_params(
     project_dir = resolve_path(project.project_dir)
     project_dir.mkdir(parents=True, exist_ok=True)
     params_path = project_dir / filename
+    resolved_draft = _draft_from_project(project, draft)
+    draft_payload = resolved_draft.model_dump(mode="json")
     run_pipeline = build_run_pipeline_params(project, draft)
     payload = {
         "run_pipeline": run_pipeline,
+        "visualization": {
+            "color_palette": draft_payload.get("color_palette"),
+        },
+        "differential": draft_payload.get("differential") or {},
     }
     with params_path.open("w", encoding="utf-8", newline="\n") as handle:
         handle.write("# X-Amplicon Web UI generated pipeline parameters.\n")

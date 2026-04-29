@@ -1,5 +1,7 @@
 import type {
   ApiErrorPayload,
+  AgentChatPayload,
+  AgentChatResponse,
   AgentExplainPayload,
   AgentExplainResponse,
   AgentStatusResponse,
@@ -186,6 +188,13 @@ export const api = {
 
   explainAgentIssue(payload: AgentExplainPayload): Promise<AgentExplainResponse> {
     return request<AgentExplainResponse>('/agent/explain', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  chatAgent(payload: AgentChatPayload): Promise<AgentChatResponse> {
+    return request<AgentChatResponse>('/agent/chat', {
       method: 'POST',
       body: JSON.stringify(payload)
     });

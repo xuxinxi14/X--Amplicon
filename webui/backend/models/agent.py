@@ -55,3 +55,30 @@ class AgentExplainResponse(WebUIBaseModel):
     commands: list[str] = Field(default_factory=list)
     warnings: list[str] = Field(default_factory=list)
     raw_response: str | None = None
+
+
+class AgentChatMessage(WebUIBaseModel):
+    """One browser-visible chat message exchanged with the Web UI Agent."""
+
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class AgentChatRequest(WebUIBaseModel):
+    """Conversational Agent payload for 16S analysis guidance."""
+
+    messages: list[AgentChatMessage] = Field(default_factory=list)
+    project_summary: str = ""
+    language: Literal["Chinese", "English"] = "Chinese"
+    prefer_llm: bool = True
+
+
+class AgentChatResponse(WebUIBaseModel):
+    """Conversational Agent response with optional actionable guidance."""
+
+    status: Literal["ok", "warning", "failed"] = "ok"
+    mode: Literal["rule_based", "llm", "fallback"] = "rule_based"
+    message: str
+    suggested_actions: list[str] = Field(default_factory=list)
+    suggested_commands: list[str] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

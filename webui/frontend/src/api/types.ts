@@ -302,6 +302,27 @@ export interface AgentExplainResponse {
   raw_response?: string | null;
 }
 
+export interface AgentChatMessagePayload {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AgentChatPayload {
+  messages: AgentChatMessagePayload[];
+  project_summary?: string;
+  language: Locale;
+  prefer_llm: boolean;
+}
+
+export interface AgentChatResponse {
+  status: 'ok' | 'warning' | 'failed';
+  mode: 'rule_based' | 'llm' | 'fallback';
+  message: string;
+  suggested_actions: string[];
+  suggested_commands: string[];
+  warnings: string[];
+}
+
 export interface ResultFigure {
   label: string;
   path: string;

@@ -532,6 +532,10 @@ export function NewAnalysis({
     setError(null);
     setNotice(null);
     try {
+      if (!paramsResult) {
+        const result = await api.writeParams(project.id, buildParamsDraft());
+        setParamsResult(result);
+      }
       const job = await api.startRun(project.id);
       setRunJob(job);
       setNotice(t.runStarted);

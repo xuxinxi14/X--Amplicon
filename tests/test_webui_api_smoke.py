@@ -44,6 +44,30 @@ class FakeJobManager:
             message="Smoke job created.",
         )
 
+    def start_sequence_job(
+        self,
+        *,
+        job_type: str,
+        commands: list[tuple[str, CommandSpec]],
+        project_id: str | None = None,
+        initial_status: str = "queued",
+    ) -> JobRecord:
+        first_command = commands[0][1]
+        display = "\n".join(f"{stage}: {command.display}" for stage, command in commands)
+        self.started.append((job_type, first_command, project_id, initial_status))
+        return JobRecord(
+            id=f"{job_type}-smoke",
+            project_id=project_id,
+            job_type=job_type,
+            status=initial_status,  # type: ignore[arg-type]
+            command=first_command.args,
+            display_command=display,
+            cwd=first_command.cwd,
+            log_path=str(self.state_dir / f"{job_type}.log"),
+            event_path=str(self.state_dir / f"{job_type}.events.jsonl"),
+            message="Smoke sequence job created.",
+        )
+
 
 class WebUIApiSmokeTests(unittest.TestCase):
     """Exercise key API endpoints against isolated local state."""
@@ -133,6 +157,15 @@ class WebUIApiSmokeTests(unittest.TestCase):
         self.assertEqual(fake_manager.started[0][0], "preflight")
         self.assertIn("check-pipeline-config", fake_manager.started[0][1].args)
 
+        with patch("webui.backend.api.projects.manager", fake_manager):
+            run_job = self.client.post(f"/api/projects/{project_id}/run")
+
+        self.assertEqual(run_job.status_code, 200, msg=run_job.text)
+        self.assertEqual(run_job.json()["job_type"], "full_analysis")
+        self.assertIn("run-pipeline-config", run_job.json()["display_command"])
+        self.assertIn("visualization-suite", run_job.json()["display_command"])
+        self.assertIn("generate-report", run_job.json()["display_command"])
+
     def test_agent_and_current_results_endpoints_are_lightweight(self) -> None:
         llm_settings = self.client.get("/api/settings/llm")
         self.assertEqual(llm_settings.status_code, 200, msg=llm_settings.text)
@@ -154,6 +187,18 @@ class WebUIApiSmokeTests(unittest.TestCase):
         self.assertEqual(explanation.status_code, 200, msg=explanation.text)
         self.assertEqual(explanation.json()["mode"], "rule_based")
         self.assertTrue(explanation.json()["summary"])
+
+        chat = self.client.post(
+            "/api/agent/chat",
+            json={
+                "messages": [{"role": "user", "content": "How should I start a 16S analysis?"}],
+                "language": "English",
+                "prefer_llm": False,
+            },
+        )
+        self.assertEqual(chat.status_code, 200, msg=chat.text)
+        self.assertEqual(chat.json()["mode"], "rule_based")
+        self.assertTrue(chat.json()["message"])
 
         current_results = self.client.get("/api/results/current")
         self.assertEqual(current_results.status_code, 200, msg=current_results.text)

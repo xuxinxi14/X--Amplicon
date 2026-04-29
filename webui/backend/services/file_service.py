@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import html
 from pathlib import Path
+import re
 from typing import Any
+from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from webui.backend.config import get_project_root, resolve_path
 from webui.backend.models.project import ProjectRecord
@@ -22,6 +25,74 @@ TEXT_EXTENSIONS = {
     ".htm",
     ".log",
 }
+
+HTML_LINK_ATTR_PATTERN = re.compile(
+    r"(?P<prefix>\b(?:src|href)\s*=\s*)(?P<quote>[\"'])(?P<url>.*?)(?P=quote)",
+    flags=re.IGNORECASE,
+)
+
+
+def _should_rewrite_html_url(url: str) -> bool:
+    stripped = url.strip()
+    if not stripped:
+        return False
+    lowered = stripped.lower()
+    if (
+        stripped.startswith("#")
+        or stripped.startswith("/")
+        or stripped.startswith("//")
+        or lowered.startswith(("http:", "https:", "data:", "javascript:", "mailto:", "tel:"))
+    ):
+        return False
+    return True
+
+
+def _split_local_html_url(url: str) -> tuple[str, str]:
+    if re.match(r"^[A-Za-z]:[\\/]", url):
+        return url, ""
+    parsed = urlsplit(url)
+    fragment = f"#{parsed.fragment}" if parsed.fragment else ""
+    return parsed.path, fragment
+
+
+def rewrite_html_links_for_file_view(
+    html_text: str,
+    *,
+    source_path: Path,
+    project: ProjectRecord | None = None,
+    settings: WebUISettings | None = None,
+    route_prefix: str = "/api/files/view",
+) -> str:
+    """Rewrite local relative HTML links so nested reports work inside /api/files/view."""
+
+    source_dir = source_path.parent.resolve()
+
+    def replace(match: re.Match[str]) -> str:
+        prefix = match.group("prefix")
+        quote_char = match.group("quote")
+        raw_url = html.unescape(match.group("url"))
+        if not _should_rewrite_html_url(raw_url):
+            return match.group(0)
+
+        local_path, fragment = _split_local_html_url(raw_url)
+        if not local_path:
+            return match.group(0)
+
+        target = Path(unquote(local_path))
+        if not target.is_absolute():
+            target = source_dir / target
+        try:
+            resolved = resolve_authorized_path(str(target.resolve()), project=project, settings=settings)
+        except PermissionError:
+            return match.group(0)
+
+        query = {"path": str(resolved)}
+        if project is not None:
+            query["project_id"] = project.id
+        rewritten = f"{route_prefix}?{urlencode(query, quote_via=quote)}{fragment}"
+        return f"{prefix}{quote_char}{html.escape(rewritten, quote=True)}{quote_char}"
+
+    return HTML_LINK_ATTR_PATTERN.sub(replace, html_text)
 
 
 def authorized_roots(

@@ -10,6 +10,8 @@ from typing import Any
 from agent.config import AgentConfig
 
 from webui.backend.models.agent import (
+    AgentChatRequest,
+    AgentChatResponse,
     AgentExplainRequest,
     AgentExplainResponse,
     AgentStatusResponse,
@@ -18,6 +20,7 @@ from webui.backend.models.agent import (
 
 AGENT_CAPABILITIES = [
     "offline_guided_help",
+    "analysis_chat",
     "error_explanation",
     "parameter_guidance",
     "reproducible_command_suggestions",
@@ -76,8 +79,193 @@ def get_agent_status() -> AgentStatusResponse:
         api_base_configured=bool(config.api_base),
         provider=_provider_from_model(config.model),
         message="LLM configuration is present. Explanations can use the optional LLM layer.",
-        capabilities=[*AGENT_CAPABILITIES, "llm_explanation"],
+        capabilities=[*AGENT_CAPABILITIES, "llm_explanation", "llm_chat"],
     )
+
+
+def _is_chat_zh(request: AgentChatRequest) -> bool:
+    return request.language == "Chinese"
+
+
+def _last_user_message(request: AgentChatRequest) -> str:
+    for message in reversed(request.messages):
+        if message.role == "user":
+            return message.content.strip()
+    return ""
+
+
+def _chat_commands_for_text(text: str) -> list[str]:
+    lowered = text.lower()
+    if _contains(lowered, "metadata", "sampleid", "sample id"):
+        return ["python process.py validate-metadata --metadata metadata.txt --sample-id-col SampleID --group-col Group"]
+    if _contains(lowered, "fastq", "r1", "r2", "pair"):
+        return ["python process.py preview-fastq-pairs --metadata metadata.txt --seq-dir seq --read1-suffix _1.fq.gz --read2-suffix _2.fq.gz"]
+    if _contains(lowered, "database", "rdp", "silva", "sintax"):
+        return ["python process.py list-databases", "python process.py check-database rdp_16s_v18"]
+    if _contains(lowered, "plot", "visual", "图", "可视化", "report", "报告", "06_final"):
+        return [
+            "python process.py visualization-suite --final-dir work\\06_final --format html",
+            "python process.py generate-report --final-dir work\\06_final",
+        ]
+    if _contains(lowered, "differential", "差异", "ko", "wt", "case", "control"):
+        return ["python process.py differential-abundance --metadata metadata.txt --otutab work\\06_final\\otutab.txt --compare KO:WT --format html"]
+    return [
+        "python process.py check-pipeline-config --params pipeline_params.webui.yaml",
+        "python process.py run-pipeline-config --params pipeline_params.webui.yaml",
+    ]
+
+
+def _rule_based_chat(request: AgentChatRequest, *, mode: str = "rule_based", warning: str | None = None) -> AgentChatResponse:
+    zh = _is_chat_zh(request)
+    user_text = _last_user_message(request)
+    context = f"{user_text}\n{request.project_summary}"
+    has_project = bool(request.project_summary.strip())
+
+    if not user_text:
+        message = (
+            "你可以直接告诉我你的分析目标，例如“我想分析这一批 16S 双端测序数据”。我会按项目创建、metadata 检查、FASTQ 配对、分组设置、preflight、完整分析、结果解读的顺序带你完成。"
+            if zh else
+            "Tell me what you want to analyze, for example: \"I want to analyze this paired-end 16S dataset.\" I will guide you through project setup, metadata checks, FASTQ pairing, groups, preflight, full analysis, and result review."
+        )
+    elif _contains(context, "plot", "visual", "可视化", "图表", "report", "报告", "index.html"):
+        message = (
+            "如果旧任务显示 completed 但没有图表，原因通常是只运行了数据处理阶段，尚未继续执行 visualization-suite 和 generate-report。当前 Web UI 的完整分析任务会在 pipeline 完成后自动继续生成 plots 和 report；旧结果可以重新启动完整分析，或在 Results 页面单独生成报告。"
+            if zh else
+            "If an older job was marked completed but produced no plots, it usually ran only the data-processing stage and did not continue to visualization-suite and generate-report. The current Web UI full-analysis job continues to plots and report after the pipeline finishes. For older outputs, rerun full analysis or generate the report from Results."
+        )
+    elif _contains(context, "start", "begin", "开始", "新建", "分析"):
+        message = (
+            "建议先从“新建分析”创建项目。第一步只需要确认项目目录、metadata 文件和 FASTQ 文件夹；随后运行 metadata 与 FASTQ 配对检查。检查通过后再设置分组和差异比较，最后先跑 preflight，再启动完整分析。"
+            if zh else
+            "Start from New Analysis. First confirm the project directory, metadata file, and FASTQ folder, then run metadata and FASTQ pairing checks. After those pass, set groups and optional comparisons, run preflight, then start the full analysis."
+        )
+    elif _contains(context, "metadata", "sampleid", "sample id", "group"):
+        message = (
+            "metadata 至少需要样本 ID 列和分组列。请确认列名与界面设置完全一致，SampleID 唯一且非空，Group 没有缺失值；然后再预览 FASTQ 配对。"
+            if zh else
+            "Metadata needs at least a sample ID column and a group column. Confirm the column names exactly match the UI settings, SampleID values are unique and non-empty, and Group has no missing values before previewing FASTQ pairs."
+        )
+    elif _contains(context, "fastq", "r1", "r2", "pair", "配对"):
+        message = (
+            "FASTQ 配对依赖 SampleID 与文件名前缀一致。请检查 read1/read2 后缀，例如 `_1.fq.gz` 和 `_2.fq.gz`，并确认每个样本都有 R1 与 R2。"
+            if zh else
+            "FASTQ pairing depends on SampleID matching filename prefixes. Check read1/read2 suffixes such as `_1.fq.gz` and `_2.fq.gz`, and confirm every sample has both R1 and R2."
+        )
+    elif _contains(context, "database", "rdp", "silva", "sintax", "数据库"):
+        message = (
+            "数据库问题优先检查 FASTA 文件是否存在、数据库名称是否已注册，以及 taxonomy_format 是否与数据库格式一致。小型 rdp_16s_v18.fa 可以作为开箱即用测试库。"
+            if zh else
+            "For database issues, first check whether the FASTA exists, the database name is registered, and taxonomy_format matches the database format. The small rdp_16s_v18.fa database is suitable for out-of-box testing."
+        )
+    elif _contains(context, "differential", "差异", "ko", "wt", "case", "control"):
+        message = (
+            "差异比较方向使用 CASE:CONTROL，例如 KO:WT 表示 KO 相对 WT 的变化。每个比较组建议至少有 2 个样本；样本数过低时结果只能作为探索性参考。"
+            if zh else
+            "Differential comparison direction uses CASE:CONTROL, for example KO:WT means KO relative to WT. Each compared group should preferably have at least two samples; very small groups should be treated as exploratory."
+        )
+    else:
+        message = (
+            "我可以围绕 X-Amplicon 的完整 16S 工作流回答问题，也可以一步步引导你完成分析。请告诉我当前停在哪一步，或把 Run Monitor 中最后几十行日志发给我。"
+            if zh else
+            "I can answer questions around the full X-Amplicon 16S workflow or guide you step by step. Tell me where you are in the workflow, or paste the last few dozen lines from Run Monitor."
+        )
+
+    actions = (
+        ["打开新建分析并检查输入", "运行 preflight", "完成后查看 Results 中的 plots、report 和 provenance"]
+        if zh else
+        ["Open New Analysis and check inputs", "Run preflight", "After completion, review plots, report, and provenance in Results"]
+    )
+    if has_project:
+        actions.insert(0, "使用当前项目上下文继续判断下一步" if zh else "Use the selected project context for the next step")
+
+    warnings = [warning] if warning else []
+    if mode == "rule_based" and request.prefer_llm:
+        warnings.append(
+            "当前未使用 LLM，回复来自本地规则引导。" if zh else "LLM was not used; this response comes from local workflow rules."
+        )
+
+    return AgentChatResponse(
+        status="ok" if mode != "fallback" else "warning",
+        mode=mode,  # type: ignore[arg-type]
+        message=message,
+        suggested_actions=actions,
+        suggested_commands=_chat_commands_for_text(context),
+        warnings=_unique(warnings),
+    )
+
+
+def _llm_chat(request: AgentChatRequest) -> AgentChatResponse:
+    config = AgentConfig()
+    status = get_agent_status()
+    if not status.llm_available:
+        return _rule_based_chat(request)
+
+    from litellm import completion  # type: ignore[import-not-found]
+
+    language = "Chinese" if request.language == "Chinese" else "English"
+    system_prompt = (
+        "You are X-Amplicon Agent, a specialist assistant for Windows-first 16S rRNA amplicon analysis. "
+        "You are built on a deterministic X-Amplicon workflow that handles paired-end FASTQ input, metadata checks, "
+        "OTU/ASV generation, taxonomy annotation, alpha/beta diversity, visualization, differential abundance, "
+        "reports, and provenance. Guide users step by step through the Web UI when they want to start analysis. "
+        "Use the selected project context when provided, but never invent files, sample groups, or completed results. "
+        "Never claim that you executed commands or changed files from this chat. Keep advice practical for bench scientists. "
+        "When useful, mention the exact Web UI page or deterministic CLI command. "
+        f"Reply in {language}; keep technical terms such as FASTQ, metadata, preflight, OTU/ASV, PCoA, and provenance in English when clearer."
+    )
+    context_prompt = {
+        "language": language,
+        "project_summary": request.project_summary[:5000],
+        "response_contract": {
+            "message": "natural language answer",
+            "suggested_actions": ["short actionable UI steps"],
+            "suggested_commands": ["optional deterministic commands"],
+            "warnings": ["optional caveats"],
+        },
+    }
+    history = [
+        {"role": message.role, "content": message.content[:4000]}
+        for message in request.messages[-12:]
+        if message.content.strip()
+    ]
+    kwargs: dict[str, Any] = {
+        "model": config.model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": json.dumps(context_prompt, ensure_ascii=False)},
+            *history,
+        ],
+        "api_key": config.api_key,
+        "timeout": 45,
+        "temperature": 0.25,
+    }
+    if config.api_base:
+        kwargs["api_base"] = config.api_base
+
+    response = completion(**kwargs)
+    content = str(response.choices[0].message.content or "").strip()
+    if not content:
+        return _rule_based_chat(request, mode="fallback", warning="LLM returned an empty response.")
+
+    return AgentChatResponse(
+        status="ok",
+        mode="llm",
+        message=content,
+        suggested_actions=[],
+        suggested_commands=[],
+        warnings=[],
+    )
+
+
+def chat_with_agent(request: AgentChatRequest) -> AgentChatResponse:
+    """Return a conversational 16S workflow response using optional LLM assistance."""
+
+    if not request.prefer_llm:
+        return _rule_based_chat(request)
+    try:
+        return _llm_chat(request)
+    except Exception as exc:
+        return _rule_based_chat(request, mode="fallback", warning=str(exc))
 
 
 def _is_zh(request: AgentExplainRequest) -> bool:

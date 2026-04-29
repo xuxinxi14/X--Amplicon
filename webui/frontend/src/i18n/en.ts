@@ -415,6 +415,48 @@ export const en = {
   agent: {
     title: 'Agent Analysis Guide',
     subtitle: 'Start here when you want to analyze 16S paired-end data. The Agent guides you through project setup, input checks, parameters, preflight, and result review.',
+    chat: {
+      badge: '16S Agent',
+      headline: 'Talk with a 16S analysis Agent',
+      subtitle: 'Ask how to start, which inputs to check, how to set groups, or how to interpret outputs. The Agent keeps the deterministic X-Amplicon workflow in view.',
+      chatTitle: 'Analysis conversation',
+      chatSubtitle: 'Use this as the main entry point. The Agent can guide setup, check next steps, explain logs, and suggest reproducible commands.',
+      welcome: 'Tell me what you want to do with your 16S data. I can guide you from project setup to metadata checks, FASTQ pairing, preflight, full analysis, visualization, report review, and differential comparison.',
+      inputPlaceholder: 'Ask a 16S workflow question, for example: I have paired FASTQ files and metadata; how should I start?',
+      send: 'Send',
+      sending: 'Sending',
+      thinking: 'Thinking through the workflow...',
+      reset: 'New chat',
+      assistantName: 'X-Amplicon Agent',
+      userName: 'You',
+      quickPromptsLabel: 'Quick prompts',
+      quickPrompts: [
+        {
+          label: 'Start analysis',
+          prompt: 'I want to start a complete 16S paired-end analysis. Please guide me step by step.'
+        },
+        {
+          label: 'Check metadata',
+          prompt: 'How should I check whether my metadata table is ready for X-Amplicon?'
+        },
+        {
+          label: 'Set comparisons',
+          prompt: 'How should I set case/control groups for differential comparison?'
+        },
+        {
+          label: 'No plots',
+          prompt: 'The job completed but I cannot see visualization plots or the report. What should I check?'
+        }
+      ],
+      initialActions: [
+        'Create or select a Web UI project',
+        'Validate metadata and preview FASTQ pairing',
+        'Run preflight before full analysis'
+      ],
+      contextTitle: 'Project context',
+      includeProjectContext: 'Include selected project context',
+      workflowTitle: 'Guided workflow'
+    },
     guide: {
       badge: 'Start analysis',
       headline: 'I will guide you step by step',

@@ -463,6 +463,48 @@ export const zh = {
     },
     title: 'Agent 助手',
     subtitle: '以本地规则帮助为基础；配置 LLM 后，可辅助解释日志、参数选择和下一步操作。',
+    chat: {
+      badge: '16S Agent',
+      headline: '和 16S 分析 Agent 对话',
+      subtitle: '可以直接询问如何开始、检查哪些输入、怎样设置分组、如何理解输出结果。Agent 会始终围绕 X-Amplicon 的确定性工作流给出建议。',
+      chatTitle: '分析对话',
+      chatSubtitle: '把这里作为主要入口。Agent 可以引导配置、判断下一步、解释日志，并给出可复现命令。',
+      welcome: '告诉我你想怎样处理这批 16S 数据。我可以从项目创建、metadata 检查、FASTQ 配对、preflight、完整分析、可视化、报告查看和差异比较一路引导你完成。',
+      inputPlaceholder: '输入 16S 工作流问题，例如：我有双端 FASTQ 和 metadata，应该怎样开始？',
+      send: '发送',
+      sending: '发送中',
+      thinking: '正在结合工作流思考...',
+      reset: '新对话',
+      assistantName: 'X-Amplicon Agent',
+      userName: '你',
+      quickPromptsLabel: '快捷提问',
+      quickPrompts: [
+        {
+          label: '开始分析',
+          prompt: '我想开始一次完整的 16S 双端测序分析，请一步步引导我。'
+        },
+        {
+          label: '检查 metadata',
+          prompt: '我应该怎样检查 metadata 表是否可以用于 X-Amplicon？'
+        },
+        {
+          label: '设置差异比较',
+          prompt: '差异比较中的 case/control 分组应该怎样设置？'
+        },
+        {
+          label: '没有图表',
+          prompt: '任务显示完成，但我看不到可视化图表或报告，应该检查什么？'
+        }
+      ],
+      initialActions: [
+        '创建或选择一个 Web UI 项目',
+        '检查 metadata 并预览 FASTQ 配对',
+        '完整分析前先运行 preflight'
+      ],
+      contextTitle: '项目上下文',
+      includeProjectContext: '附带当前项目上下文',
+      workflowTitle: '引导式工作流'
+    },
     status: 'Agent 状态',
     online: '在线',
     offline: '离线',

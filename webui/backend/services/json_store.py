@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import tempfile
+import time
 from typing import Any
 
 
@@ -13,8 +14,17 @@ def read_json(path: Path, default: Any) -> Any:
 
     if not path.exists():
         return default
-    with path.open("r", encoding="utf-8") as handle:
-        return json.load(handle)
+    last_error: Exception | None = None
+    for _ in range(10):
+        try:
+            with path.open("r", encoding="utf-8") as handle:
+                return json.load(handle)
+        except (PermissionError, json.JSONDecodeError) as exc:
+            last_error = exc
+            time.sleep(0.03)
+    if last_error is not None:
+        raise last_error
+    return default
 
 
 def write_json(path: Path, payload: Any) -> None:
@@ -31,4 +41,13 @@ def write_json(path: Path, payload: Any) -> None:
         json.dump(payload, handle, ensure_ascii=False, indent=2)
         handle.write("\n")
         temp_path = Path(handle.name)
-    temp_path.replace(path)
+    last_error: PermissionError | None = None
+    for _ in range(20):
+        try:
+            temp_path.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            time.sleep(0.05)
+    if last_error is not None:
+        raise last_error
