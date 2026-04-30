@@ -152,6 +152,7 @@ Use the Web UI in this order:
 The Web UI does not upload sequencing files. Data, logs, and results stay local.
 
 ## Input Files
+<img width="1583" height="674" alt="image" src="https://github.com/user-attachments/assets/d2a3cbf2-8e9b-4090-8392-332cd9a11116" />
 
 Typical project layout:
 
@@ -180,6 +181,7 @@ Requirements:
 - A group column such as `Group` is needed for diversity plots and differential comparisons.
 
 ## Output Files
+<img width="1584" height="1179" alt="image" src="https://github.com/user-attachments/assets/a17feaf7-ac65-470c-bf5a-99824f5dd7d0" />
 
 The default output root is:
 
@@ -212,6 +214,7 @@ Generate `plots/` and `report/` afterward with `visualization-suite` and
 placed together in one directory.
 
 ## Optional LLM Agent
+<img width="1586" height="1137" alt="image" src="https://github.com/user-attachments/assets/1a27c243-d392-446b-a0f9-9f0490c43efd" />
 
 The full analysis workflow works without an API key. To enable LLM-assisted guidance:
 
