@@ -1,0 +1,56 @@
+# X-Amplicon Linux pipeline parameters.
+# Check:
+#   ./run_process.sh check-pipeline-config --params pipeline_params.linux.yaml
+# Run:
+#   ./run_process.sh run-pipeline-config --params pipeline_params.linux.yaml
+
+run_pipeline:
+  metadata_path: metadata.txt
+  seq_dir: seq
+  output_root: work
+
+  read1_suffix: _1.fq.gz
+  read2_suffix: _2.fq.gz
+
+  fastq_stripleft: 29
+  fastq_stripright: 18
+  fastq_maxee_rate: 0.01
+
+  feature_method: usearch-asv
+  feature_minsize: 10
+  feature_identity: 1.0
+
+  chimera_mode: ref
+  reference_db: database/rdp_16s_v18.fa
+
+  otutab_method: usearch
+  otutab_identity: 1.0
+
+  annotation_database: rdp_16s_v18
+  sintax_cutoff: 0.1
+
+  filter_route: 16s
+
+  beta_tree_path:
+  rarefaction_depth: 8000
+  rarefaction_seed: 1
+
+  threads: 8
+
+  usearch_path: bin/usearch
+  vsearch_path: bin/vsearch
+
+visualization:
+  output_format: html
+  color_palette:
+
+differential_analysis:
+  group_col: Group
+  reference_group: WT
+  comparisons:
+    - KO:WT
+    - OE:WT
+  method: wilcox
+  pvalue: 0.05
+  fdr: 0.2
+  output_format: html

@@ -1,0 +1,25 @@
+otu_defaults:
+  identity: 0.97
+  minsize: 1
+
+vsearch_otu_defaults:
+  identity: 0.97
+  minsize: 1
+
+vsearch_uchime_ref_defaults:
+  reference_db: database/rdp_16s_v18.fa
+  chimera_mode: ref
+
+vsearch_sintax_defaults:
+  database: rdp_16s_v18
+  sintax_cutoff: 0.1
+
+otutab_defaults:
+  method: vsearch
+  identity: 0.97
+
+usearch_otu_defaults:
+  minsize: 10
+
+usearch_asv_defaults:
+  minsize: 10
