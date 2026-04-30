@@ -180,6 +180,7 @@ S2	KO
 - 多样性图和差异比较需要一个分组列，例如 `Group`。
 
 ## 输出文件
+<img width="1580" height="1187" alt="image" src="https://github.com/user-attachments/assets/301a9fa2-bf14-45f2-9822-c0799a727d20" />
 
 默认输出根目录：
 
@@ -218,6 +219,7 @@ CLI 的 `run-pipeline-config` 会先生成核心分析结果。`plots/` 和 `rep
 2. 选择或输入 LiteLLM 兼容模型。
 3. 如需代理或自定义网关，填写 OpenAI-compatible API base URL。
 4. 填写 API key。
+<img width="1589" height="1152" alt="image" src="https://github.com/user-attachments/assets/9a45a607-9a4d-44e8-843c-638e2009677f" />
 
 API key 会保存在本地 `.env` 中，设置接口不会把 key 返回给浏览器。
 
@@ -232,6 +234,7 @@ LLM_API_BASE=https://your-openai-compatible-endpoint/v1
 ## CLI 使用
 
 大多数用户推荐使用 Web UI。CLI 适合脚本化运行和精确复现。
+<img width="1271" height="1072" alt="image" src="https://github.com/user-attachments/assets/9be5b674-004f-419f-aa65-d6d0371fe2d5" />
 
 标准流程：
 
