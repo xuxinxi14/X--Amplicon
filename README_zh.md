@@ -17,6 +17,9 @@ X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 A
 - 可在 Web UI 中配置 LLM：API key、API base URL 和模型切换。
 - 输出包括 Plotly 图表、HTML/Markdown 报告、`run_summary.json` 和 provenance 文件。
 
+<img width="1012" height="674" alt="938062bfa773ad3c8fb3c77fbd489a0" src="https://github.com/user-attachments/assets/6b658afc-96fb-4a2f-b07b-b74279233c53" />
+
+
 ## 快速开始：Windows 安装器
 
 大多数用户推荐从 GitHub Releases 下载 Windows 安装器：
@@ -111,7 +114,7 @@ chmod +x setup_linux.sh start_webui.sh run_process.sh run_agent.sh
 ./run_process.sh generate-report --final-dir work/06_final
 ```
 
-Linux Web UI 需要在终端里启动，不要在 Jupyter 文件列表中直接点击 `.sh` 文件：
+Linux Web UI 需要在终端里启动
 
 ```bash
 ./start_webui.sh --no-browser
