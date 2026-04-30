@@ -152,6 +152,7 @@ ssh -N -L 8899:127.0.0.1:8899 user@server
 Web UI 不上传测序文件。数据、日志和结果都保留在本机。
 
 ## 输入文件
+<img width="1593" height="654" alt="image" src="https://github.com/user-attachments/assets/4fa3e794-3960-4135-83a4-73913fd876a7" />
 
 典型项目目录：
 
