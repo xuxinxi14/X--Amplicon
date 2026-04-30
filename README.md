@@ -1,6 +1,7 @@
 [English](README.md) | [中文](README_zh.md)
 
 # X-Amplicon
+author:XinXi Xu
 
 X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with a Linux x86_64 server package for command-line and browser-based deployment. It turns paired-end FASTQ files and a metadata table into OTU/ASV tables, taxonomy annotation, alpha/beta diversity, publication-ready visualizations, differential abundance plots, reports, and reproducibility records.
 
@@ -16,6 +17,9 @@ The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequ
 - No-LLM mode for local checks, visualization, reports, and most guidance.
 - Optional LLM configuration from the Web UI: API key, API base URL, and model selection.
 - Outputs include Plotly charts, report HTML/Markdown, `run_summary.json`, and provenance files.
+
+<img width="1014" height="671" alt="c1a4c08be4838b85f1ee997ea8b795b" src="https://github.com/user-attachments/assets/557330d5-e8ef-41a5-9ad1-2983c4d17f87" />
+
 
 ## Quick Start: Windows Installer
 
@@ -111,7 +115,7 @@ Run the full CLI workflow:
 ./run_process.sh generate-report --final-dir work/06_final
 ```
 
-Start the Linux Web UI from a terminal, not by clicking the `.sh` file in Jupyter:
+Start the Linux Web UI from a terminal:
 
 ```bash
 ./start_webui.sh --no-browser
