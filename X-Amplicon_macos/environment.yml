@@ -1,0 +1,20 @@
+name: seq-proc-env
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python>=3.10
+  - numpy
+  - pandas
+  - scipy
+  - scikit-bio
+  - vsearch
+  - pip
+  - pip:
+      - pyyaml
+      - click
+      - biopython
+      - pydantic>=2.0
+      - plotly>=5.15
+      - rich
+      - litellm

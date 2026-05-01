@@ -1,0 +1,226 @@
+"""Rarefaction and alpha diversity workflow for OTU tables."""
+
+from __future__ import annotations
+
+import os
+import random
+from typing import Any, Dict, Optional
+
+import pandas as pd
+
+from src.utils.command_runner import run_command
+
+from .alpha_diversity import calculate_alpha_diversity
+from .workflow_common import (
+    DEFAULT_USEARCH_WINDOWS_PATH,
+    ensure_input_file,
+    resolve_executable,
+)
+
+
+def resolve_usearch_executable(usearch_path: Optional[str] = None) -> str:
+    """Resolve a usable USEARCH executable path."""
+
+    return resolve_executable(
+        executable_name="usearch",
+        configured_path=usearch_path,
+        windows_default_path=DEFAULT_USEARCH_WINDOWS_PATH,
+        label="USEARCH",
+    )
+
+
+def _read_otutab(path: str) -> tuple[list[str], list[str], Dict[str, list[int]]]:
+    with open(path, "r", encoding="utf-8", newline=None) as handle:
+        header_line = handle.readline().rstrip("\r\n")
+        if not header_line:
+            raise ValueError(f"Feature table is empty: {path}")
+
+        header_parts = header_line.split("\t")
+        if len(header_parts) < 2:
+            raise ValueError(f"Invalid feature table header: {path}")
+
+        sample_names = header_parts[1:]
+        feature_ids: list[str] = []
+        counts_by_feature: Dict[str, list[int]] = {}
+
+        for raw_line in handle:
+            line = raw_line.rstrip("\r\n")
+            if not line:
+                continue
+
+            parts = line.split("\t")
+            if len(parts) != len(sample_names) + 1:
+                raise ValueError(f"Invalid feature table row: {line}")
+
+            feature_id = parts[0]
+            counts = [int(value) for value in parts[1:]]
+            feature_ids.append(feature_id)
+            counts_by_feature[feature_id] = counts
+
+    return sample_names, feature_ids, counts_by_feature
+
+
+def _resolve_depth(sample_totals: list[int], depth: int) -> int:
+    minimum_total = min(sample_totals)
+    if depth == 0:
+        if minimum_total <= 0:
+            raise ValueError(
+                "depth resolves to 0 because at least one sample has no reads."
+            )
+        return minimum_total
+    if depth < 0:
+        raise ValueError("depth must be 0 or a positive integer.")
+    return depth
+
+
+def _rarefy_counts(
+    counts: list[int],
+    depth: int,
+    rng: random.Random,
+) -> list[int]:
+    if depth <= 0:
+        raise ValueError("depth must be greater than 0 for rarefaction.")
+
+    pool: list[int] = []
+    for index, count in enumerate(counts):
+        if count > 0:
+            pool.extend([index] * count)
+
+    if len(pool) < depth:
+        return counts[:]
+
+    selected = rng.sample(pool, depth)
+    rarefied = [0] * len(counts)
+    for feature_index in selected:
+        rarefied[feature_index] += 1
+    return rarefied
+
+
+def _write_rarefied_table(
+    path: str,
+    feature_ids: list[str],
+    sample_names: list[str],
+    sample_counts: Dict[str, list[int]],
+) -> None:
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write("#OTUID\t" + "\t".join(sample_names) + "\n")
+        for feature_index, feature_id in enumerate(feature_ids):
+            row = [str(sample_counts[sample_name][feature_index]) for sample_name in sample_names]
+            handle.write(feature_id + "\t" + "\t".join(row) + "\n")
+
+
+def _write_alpha_table(
+    path: str,
+    sample_names: list[str],
+    sample_counts: Dict[str, list[int]],
+) -> None:
+    otutab = pd.DataFrame(
+        {sample_name: sample_counts[sample_name] for sample_name in sample_names}
+    )
+    alpha = calculate_alpha_diversity(otutab).reset_index()
+    alpha.to_csv(path, sep="\t", index=False, encoding="utf-8", lineterminator="\n")
+
+
+def _write_discard_samples(path: str, sample_names: list[str]) -> None:
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        for sample_name in sample_names:
+            handle.write(f"{sample_name}\n")
+
+
+def run_otutab_rare(
+    input_table: str,
+    depth: int = 0,
+    seed: int = 1,
+    normalize_path: Optional[str] = None,
+    output_path: Optional[str] = None,
+    stats_path: Optional[str] = None,
+    usearch_path: Optional[str] = None,
+    command_timeout: Optional[float] = None,
+) -> Dict[str, Any]:
+    """Rarefy an OTU table, compute alpha diversity, and run otutab_stats."""
+
+    resolved_input_table = ensure_input_file(input_table, "input_table")
+
+    normalized_output_path = os.path.abspath(
+        normalize_path or os.path.join(os.path.dirname(resolved_input_table), "otutab_rare.txt")
+    )
+    alpha_output_path = os.path.abspath(
+        output_path or os.path.join(os.path.dirname(resolved_input_table), "alpha", "vegan.txt")
+    )
+    otutab_stats_output_path = os.path.abspath(
+        stats_path or os.path.join(os.path.dirname(normalized_output_path), "otutab_rare.stat")
+    )
+    discard_samples_path = os.path.abspath(normalized_output_path + ".discard")
+
+    for target_path in [
+        normalized_output_path,
+        alpha_output_path,
+        otutab_stats_output_path,
+        discard_samples_path,
+    ]:
+        parent_dir = os.path.dirname(target_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+    sample_names, feature_ids, counts_by_feature = _read_otutab(resolved_input_table)
+    sample_totals = [sum(counts_by_feature[feature_id][index] for feature_id in feature_ids) for index in range(len(sample_names))]
+    resolved_depth = _resolve_depth(sample_totals, depth)
+    rng = random.Random(seed)
+
+    print("[OTUTAB RARE] Starting rarefaction workflow.")
+    print(f"[OTUTAB RARE] Input feature table: {resolved_input_table}")
+    print(f"[OTUTAB RARE] Rarefaction depth: {resolved_depth}")
+    print(f"[OTUTAB RARE] Random seed: {seed}")
+    print(f"[OTUTAB RARE] Rarefied table: {normalized_output_path}")
+    print(f"[OTUTAB RARE] Alpha output: {alpha_output_path}")
+    print(f"[OTUTAB RARE] OTU table stats: {otutab_stats_output_path}")
+
+    transposed_counts: Dict[str, list[int]] = {}
+    discarded_samples: list[str] = []
+    kept_samples: list[str] = []
+
+    for sample_index, sample_name in enumerate(sample_names):
+        sample_counts = [counts_by_feature[feature_id][sample_index] for feature_id in feature_ids]
+        rarefied_counts = _rarefy_counts(sample_counts, resolved_depth, rng)
+        if sum(rarefied_counts) >= resolved_depth:
+            kept_samples.append(sample_name)
+            transposed_counts[sample_name] = rarefied_counts
+        else:
+            discarded_samples.append(sample_name)
+
+    _write_discard_samples(discard_samples_path, discarded_samples)
+    _write_rarefied_table(
+        normalized_output_path,
+        feature_ids,
+        kept_samples,
+        transposed_counts,
+    )
+    _write_alpha_table(alpha_output_path, kept_samples, transposed_counts)
+
+    resolved_usearch = resolve_usearch_executable(usearch_path)
+    run_command(
+        [
+            resolved_usearch,
+            "-otutab_stats",
+            normalized_output_path,
+            "-output",
+            otutab_stats_output_path,
+        ],
+        timeout=command_timeout,
+    )
+
+    print("[OTUTAB RARE] Workflow finished successfully.")
+
+    return {
+        "input_table": resolved_input_table,
+        "depth": resolved_depth,
+        "seed": seed,
+        "normalize": normalized_output_path,
+        "discard": discard_samples_path,
+        "alpha": alpha_output_path,
+        "stats": otutab_stats_output_path,
+        "discarded_samples": discarded_samples,
+        "kept_samples": kept_samples,
+        "usearch": resolved_usearch,
+        "command_timeout": command_timeout,
+    }
