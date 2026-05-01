@@ -1,0 +1,3 @@
+SampleID	Group
+S1	WT
+S2	KO

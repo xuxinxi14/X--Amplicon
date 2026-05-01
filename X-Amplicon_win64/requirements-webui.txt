@@ -1,0 +1,9 @@
+# Optional local Web UI dependencies
+#
+# Install these when you want to run the browser-based X-Amplicon interface.
+# The deterministic CLI and Agent shell do not require this file.
+fastapi
+uvicorn[standard]
+pydantic>=2.0
+python-multipart
+aiofiles

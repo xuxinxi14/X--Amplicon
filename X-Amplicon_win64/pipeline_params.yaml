@@ -1,0 +1,89 @@
+# X-Amplicon 完整流程参数文件。
+# 先做 CLI 预检查：
+# & .\.tools\python-3.13.13-amd64\python.exe process.py check-pipeline-config --params pipeline_params.yaml
+# 正式运行：
+# & .\.tools\python-3.13.13-amd64\python.exe process.py run-pipeline-config --params pipeline_params.yaml
+# 运行完成后会在 output_root/06_final 写入 run_summary.json。
+
+run_pipeline:
+  # metadata 表路径。必须是制表符分隔文本，第一列必须是样本 ID。
+  metadata_path: metadata.txt
+
+  # 原始双端测序文件所在目录。
+  seq_dir: seq
+
+  # 输出根目录。程序会自动创建 00_input 到 06_final 等阶段目录。
+  output_root: work
+
+  # Read1 文件名后缀。程序会按 SampleID + 后缀匹配文件。
+  read1_suffix: _1.fq.gz
+
+  # Read2 文件名后缀。程序会按 SampleID + 后缀匹配文件。
+  read2_suffix: _2.fq.gz
+
+  # 左端剪切长度。
+  fastq_stripleft: 29
+
+  # 右端剪切长度。
+  fastq_stripright: 18
+
+  # 最大期望错误率。
+  fastq_maxee_rate: 0.01
+
+  # 特征生成方法，可选 usearch-asv、usearch-otu、vsearch-otu。
+  feature_method: usearch-asv
+
+  # 去冗余和特征生成共用的最小丰度阈值。
+  feature_minsize: 10
+
+  # 仅在 feature_method=vsearch-otu 时使用的聚类相似度阈值。
+  feature_identity: 1.0
+
+  # 去嵌合体模式，可选 ref、none。
+  chimera_mode: ref
+
+  # 参考数据库路径。仅在 chimera_mode=ref 时使用。
+  reference_db: database/rdp_16s_v18.fa
+
+  # 生成原始 OTU/ASV 表的方法，可选 usearch、vsearch。
+  otutab_method: usearch
+
+  # 仅在 otutab_method=vsearch 时使用的比对相似度阈值。
+  otutab_identity: 1.0
+
+  # SINTAX 注释数据库预设，可选 rdp_16s_v18、silva_16s_v123。
+  annotation_database: rdp_16s_v18
+
+  # SINTAX 置信度阈值。
+  sintax_cutoff: 0.1
+
+  # 末端过滤路线，可选 16s、its、none。
+  filter_route: 16s
+
+  # OTU 表等量抽样深度。设为 0 时自动取最小样本测序深度。
+  rarefaction_depth: 8000
+
+  # 等量抽样 OTU 表和 Alpha 稀释曲线使用的随机种子。
+  rarefaction_seed: 1
+
+  # usearch/vsearch 阶段共用线程数。
+  threads: 16
+
+  # 可选。显式指定 usearch 可执行文件路径。
+  usearch_path: bin\windows\usearch.exe
+
+  # 可选。显式指定 vsearch 可执行文件路径。
+  vsearch_path: bin\windows\vsearch.exe
+
+# 可选差异丰度分析配置示例。当前完整流程不会自动运行此部分；
+# 请在 run-pipeline-config 完成后使用 process.py differential-abundance 调用。
+# differential_analysis:
+#   group_col: Group
+#   reference_group: WT
+#   comparisons:
+#     - KO:WT
+#     - OE:WT
+#   method: wilcox
+#   pvalue: 0.05
+#   fdr: 0.2
+#   output_format: html
