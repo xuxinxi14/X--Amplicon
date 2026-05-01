@@ -3,7 +3,7 @@
 # X-Amplicon
 author:XinXi Xu
 
-X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with a Linux x86_64 server package for command-line and browser-based deployment. It turns paired-end FASTQ files and a metadata table into OTU/ASV tables, taxonomy annotation, alpha/beta diversity, publication-ready visualizations, differential abundance plots, reports, and reproducibility records.
+X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with Linux x86_64 and macOS release workspaces for command-line and browser-based deployment. It turns paired-end FASTQ files and a metadata table into OTU/ASV tables, taxonomy annotation, alpha/beta diversity, publication-ready visualizations, differential abundance plots, reports, and reproducibility records.
 
 The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequencing files on your computer, guides users step by step, and calls the same deterministic Python workflow as the CLI. An LLM API key is optional.
 
@@ -12,6 +12,7 @@ The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequ
 - Local Windows Web UI for wet-lab users.
 - One-click Windows installer with bundled Python, RDP 16S database, USEARCH/VSEARCH, and prebuilt Web UI.
 - Linux x86_64 package with setup, Web UI, CLI launchers, bundled small RDP database, and server test workflow.
+- macOS preview package with setup, Web UI, CLI launchers, bundled small RDP database, and Intel/Apple Silicon USEARCH 12 binaries selected by `bin/usearch`.
 - Guided Agent page for analysis readiness and step-by-step execution.
 - Deterministic `process.py` workflow for reproducibility and automation.
 - No-LLM mode for local checks, visualization, reports, and most guidance.
@@ -137,6 +138,44 @@ ssh -N -L 8899:127.0.0.1:8899 user@server
 ```
 
 Then open `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`.
+
+## Quick Start: macOS Preview
+
+The macOS release workspace is intended for Intel and Apple Silicon macOS:
+
+```bash
+cd /path/to/X-Amplicon_macos
+chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
+  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
+./setup_macos.sh
+```
+
+`bin/usearch` is a wrapper that selects `usearch_osx_m_12.0-beta` on Apple
+Silicon and `usearch_osx_x86_12.0-beta` on Intel macOS. The bundled VSEARCH
+binary is x86_64; Apple Silicon users may need Rosetta 2 if macOS cannot run it.
+
+Check the macOS pipeline configuration:
+
+```bash
+./run_process.sh check-pipeline-config --params pipeline_params.macos.yaml
+```
+
+Run the full CLI workflow:
+
+```bash
+./run_process.sh run-pipeline-config --params pipeline_params.macos.yaml
+./run_process.sh visualization-suite --final-dir work/06_final --format html
+./run_process.sh generate-report --final-dir work/06_final
+```
+
+Start the macOS Web UI:
+
+```bash
+./start_webui.sh --no-browser
+```
+
+Then open `http://127.0.0.1:8765`. See
+`X-Amplicon_macos/README_MACOS.md` for the complete macOS notes.
 
 ## Web UI Workflow
 

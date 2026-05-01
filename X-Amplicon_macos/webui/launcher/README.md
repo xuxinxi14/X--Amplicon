@@ -1,6 +1,27 @@
 # X-Amplicon Web UI Launcher
 
-This directory contains Windows launcher scripts for the local browser interface.
+For the macOS release workspace, use the shell launcher at the project root:
+
+```bash
+./start_webui.sh
+```
+
+Common macOS options:
+
+```bash
+./start_webui.sh --no-browser
+./start_webui.sh --port 8770
+./start_webui.sh --repair-deps
+./start_webui.sh --build-frontend
+```
+
+The PowerShell launcher in this directory is retained for source-tree
+compatibility with the Windows package and is not used by `setup_macos.sh`.
+
+## Windows Launcher Reference
+
+This directory also contains Windows launcher scripts for the local browser
+interface.
 
 Recommended root command:
 

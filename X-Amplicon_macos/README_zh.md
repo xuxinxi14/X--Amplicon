@@ -3,7 +3,8 @@
 这是 X-Amplicon 的 macOS 发行工作区。优先从这里开始：
 
 ```bash
-chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh bin/usearch bin/vsearch
+chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
+  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
 ./setup_macos.sh
 ./start_webui.sh
 ```
@@ -13,6 +14,14 @@ chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh bin/usearch b
 ```text
 http://127.0.0.1:8765
 ```
+
+`bin/usearch` 会按当前 macOS 架构自动选择内置 USEARCH 12：
+
+- Apple Silicon：`bin/usearch_osx_m_12.0-beta`
+- Intel macOS：`bin/usearch_osx_x86_12.0-beta`
+
+当前内置的 VSEARCH 是 x86_64 版本；Apple Silicon 用户如果无法运行，需要安装
+Rosetta 2。
 
 完整说明见：
 

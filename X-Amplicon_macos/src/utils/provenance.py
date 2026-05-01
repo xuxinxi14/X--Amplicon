@@ -202,7 +202,7 @@ def get_executable_version(path: str | None, label: str) -> dict[str, Any]:
     if not record["exists"]:
         return record
 
-    for args in (["--version"], ["-version"], ["version"]):
+    for args in (["--version"], ["-version"], ["version"], []):
         try:
             result = subprocess.run(
                 [resolved_path, *args],
@@ -216,11 +216,13 @@ def get_executable_version(path: str | None, label: str) -> dict[str, Any]:
             continue
 
         text = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
-        if text:
+        if result.returncode == 0 and text:
             record["version"] = text.splitlines()[0].strip()
             record["version_command"] = [resolved_path, *args]
             record["version_returncode"] = result.returncode
             return record
+        if text:
+            record["version_error"] = text.splitlines()[0].strip()
 
     return record
 

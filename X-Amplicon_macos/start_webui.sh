@@ -177,7 +177,7 @@ if [[ "$DEV" -eq 1 ]]; then
   exit $?
 fi
 
-if [[ "$BUILD_FRONTEND" -eq 1 || ( ! frontend_built && "$NO_BUILD" -eq 0 ) ]]; then
+if [[ "$BUILD_FRONTEND" -eq 1 ]] || { ! frontend_built && [[ "$NO_BUILD" -eq 0 ]]; }; then
   build_frontend
 fi
 

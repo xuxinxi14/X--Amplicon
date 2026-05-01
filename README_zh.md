@@ -3,7 +3,7 @@
 # X-Amplicon
 作者：徐新玺
 
-X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 Agent 和 Web UI，同时提供 Linux x86_64 服务器包，支持命令行和浏览器部署。它可以从双端 FASTQ 文件和 metadata 表出发，生成 OTU/ASV 表、物种注释、alpha/beta 多样性、论文级可视化、差异丰度图表、分析报告和可复现性记录。
+X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 Agent 和 Web UI，同时提供 Linux x86_64 和 macOS 发行工作区，支持命令行和浏览器部署。它可以从双端 FASTQ 文件和 metadata 表出发，生成 OTU/ASV 表、物种注释、alpha/beta 多样性、论文级可视化、差异丰度图表、分析报告和可复现性记录。
 
 推荐使用方式是本地浏览器 Web UI。Web UI 会把测序文件保留在用户电脑中，通过向导一步步引导分析，并调用与 CLI 相同的确定性 Python 工作流。LLM API key 是可选项。
 
@@ -12,6 +12,7 @@ X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 A
 - 面向湿实验用户的 Windows 本地 Web UI。
 - 一键 Windows 安装器内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
 - Linux x86_64 包提供 setup、Web UI、CLI 启动脚本、内置小型 RDP 数据库和服务器测试流程。
+- macOS 预览包提供 setup、Web UI、CLI 启动脚本、内置小型 RDP 数据库，并通过 `bin/usearch` 自动选择 Intel/Apple Silicon 对应的 USEARCH 12。
 - Agent 页面提供分析前准备检查和分步引导。
 - `process.py` 提供可复现、可自动化的确定性工作流。
 - 无 LLM 模式下也可完成本地检查、可视化、报告生成和大部分帮助功能。
@@ -137,6 +138,45 @@ ssh -N -L 8899:127.0.0.1:8899 user@server
 ```
 
 然后打开 `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`。
+
+## 快速开始：macOS 预览版
+
+macOS 发行工作区面向 Intel 和 Apple Silicon macOS：
+
+```bash
+cd /path/to/X-Amplicon_macos
+chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
+  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
+./setup_macos.sh
+```
+
+`bin/usearch` 是自动选择架构的 wrapper：Apple Silicon 会使用
+`usearch_osx_m_12.0-beta`，Intel macOS 会使用
+`usearch_osx_x86_12.0-beta`。当前内置的 VSEARCH 是 x86_64 版本；
+Apple Silicon 用户如果无法运行，需要安装 Rosetta 2。
+
+检查 macOS pipeline 配置：
+
+```bash
+./run_process.sh check-pipeline-config --params pipeline_params.macos.yaml
+```
+
+运行完整 CLI 流程：
+
+```bash
+./run_process.sh run-pipeline-config --params pipeline_params.macos.yaml
+./run_process.sh visualization-suite --final-dir work/06_final --format html
+./run_process.sh generate-report --final-dir work/06_final
+```
+
+启动 macOS Web UI：
+
+```bash
+./start_webui.sh --no-browser
+```
+
+然后打开 `http://127.0.0.1:8765`。完整说明见
+`X-Amplicon_macos/README_MACOS_zh.md`。
 
 ## Web UI 使用流程
 

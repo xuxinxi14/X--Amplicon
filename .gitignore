@@ -30,6 +30,11 @@ webui/frontend/dist/
 webui/frontend/*.tsbuildinfo
 webui/frontend/vite.config.js
 webui/frontend/vite.config.d.ts
+X-Amplicon_macos/webui/frontend/node_modules/
+X-Amplicon_macos/webui/frontend/.vite/
+X-Amplicon_macos/webui/frontend/*.tsbuildinfo
+X-Amplicon_macos/webui/frontend/vite.config.js
+X-Amplicon_macos/webui/frontend/vite.config.d.ts
 
 # X-Amplicon generated outputs and runtime state
 work/
@@ -49,6 +54,12 @@ metadata.txt
 # Large reference databases and external executables
 databas/
 bin/
+!X-Amplicon_macos/bin/
+!X-Amplicon_macos/bin/usearch
+!X-Amplicon_macos/bin/usearch_osx_m_12.0-beta
+!X-Amplicon_macos/bin/usearch_osx_x86_12.0-beta
+!X-Amplicon_macos/bin/vsearch
+X-Amplicon_macos/bin/usearch_i386_legacy
 
 # Temporary test workspaces
 tests/tmp*/

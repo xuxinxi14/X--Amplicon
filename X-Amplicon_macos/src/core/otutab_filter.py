@@ -7,13 +7,9 @@ import re
 import shutil
 from typing import Any, Dict, Optional
 
-from src.utils.command_runner import run_command
-
 from .workflow_common import (
-    DEFAULT_USEARCH_WINDOWS_PATH,
     ensure_input_file,
     ensure_input_fasta,
-    resolve_executable,
 )
 
 ROUTE_16S = "16s"
@@ -24,17 +20,6 @@ BACTERIA_ARCHAEA_PATTERN = re.compile(r"Bacteria|Archaea")
 FUNGI_PATTERN = re.compile(r"Fungi")
 CHLOROPLAST_PATTERN = re.compile(r"Chloroplast")
 MITOCHONDRIA_PATTERN = re.compile(r"Mitochondria")
-
-
-def resolve_usearch_executable(usearch_path: Optional[str] = None) -> str:
-    """Resolve a usable USEARCH executable path."""
-
-    return resolve_executable(
-        executable_name="usearch",
-        configured_path=usearch_path,
-        windows_default_path=DEFAULT_USEARCH_WINDOWS_PATH,
-        label="USEARCH",
-    )
 
 
 def _resolve_route(route: str) -> str:
@@ -161,6 +146,52 @@ def _write_sintax_subset(
             if feature_id not in sintax_line_by_id:
                 raise ValueError(f"Feature ID missing from taxonomy file: {feature_id}")
             handle.write(sintax_line_by_id[feature_id] + "\n")
+
+
+def _read_fasta_records(path: str) -> Dict[str, str]:
+    records: Dict[str, str] = {}
+    current_id: Optional[str] = None
+    current_lines: list[str] = []
+
+    with open(path, "r", encoding="utf-8", newline=None) as handle:
+        for raw_line in handle:
+            line = raw_line.rstrip("\r\n")
+            if not line:
+                continue
+            if line.startswith(">"):
+                if current_id is not None:
+                    records[current_id] = "\n".join(current_lines)
+                current_id = line[1:].split(None, 1)[0]
+                if not current_id:
+                    raise ValueError(f"FASTA record with empty ID in: {path}")
+                current_lines = [line]
+            else:
+                if current_id is None:
+                    raise ValueError(f"FASTA sequence found before first header in: {path}")
+                current_lines.append(line)
+
+    if current_id is not None:
+        records[current_id] = "\n".join(current_lines)
+
+    return records
+
+
+def _write_fasta_subset(
+    source_path: str,
+    destination_path: str,
+    feature_ids: list[str],
+) -> None:
+    records_by_id = _read_fasta_records(source_path)
+    missing_ids = [feature_id for feature_id in feature_ids if feature_id not in records_by_id]
+    if missing_ids:
+        preview = ", ".join(missing_ids[:10])
+        suffix = "" if len(missing_ids) <= 10 else f", ... ({len(missing_ids)} total)"
+        raise ValueError(f"Feature IDs missing from representative FASTA: {preview}{suffix}")
+
+    with open(destination_path, "w", encoding="utf-8", newline="\n") as handle:
+        for feature_id in feature_ids:
+            handle.write(records_by_id[feature_id])
+            handle.write("\n")
 
 
 def _copy_if_needed(source: str, destination: str) -> None:
@@ -356,19 +387,11 @@ def run_otutab_filter(
     _write_otutab(resolved_output_table_path, sample_names, filtered_rows)
     _write_id_file(resolved_output_id_path, selected_feature_ids)
 
-    resolved_usearch = resolve_usearch_executable(usearch_path)
-    print("[OTUTAB FILTER] Extracting representative sequences with USEARCH fastx_getseqs.")
-    run_command(
-        [
-            resolved_usearch,
-            "-fastx_getseqs",
-            resolved_representative_fasta,
-            "-labels",
-            resolved_output_id_path,
-            "-fastaout",
-            resolved_output_fasta_path,
-        ],
-        timeout=command_timeout,
+    print("[OTUTAB FILTER] Extracting representative sequences with Python FASTA subset.")
+    _write_fasta_subset(
+        resolved_representative_fasta,
+        resolved_output_fasta_path,
+        selected_feature_ids,
     )
 
     _write_sintax_subset(
@@ -389,6 +412,6 @@ def run_otutab_filter(
         "selected_ids": resolved_output_id_path,
         "kept_features": len(selected_feature_ids),
         "discarded_features": len(discard_lines),
-        "usearch": resolved_usearch,
+        "usearch": None,
         "command_timeout": command_timeout,
     }

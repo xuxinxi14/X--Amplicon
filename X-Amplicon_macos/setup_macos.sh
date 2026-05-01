@@ -148,12 +148,34 @@ def probe(args, timeout=15):
     except Exception as exc:
         return f"probe failed: {exc}"
 
+def probe_version(path):
+    for suffix in (["--version"], ["-version"], ["version"], []):
+        try:
+            completed = subprocess.run(
+                [str(path), *suffix],
+                cwd=str(root),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=15,
+                check=False,
+            )
+        except Exception as exc:
+            last_error = f"probe failed: {exc}"
+            continue
+        text = completed.stdout.strip()
+        if completed.returncode == 0 and text:
+            return text
+        if text:
+            last_error = text
+    return last_error if "last_error" in locals() else ""
+
 def tool_status(path):
     if not path.is_file():
         return {"exists": False, "executable": False, "file": "", "version": ""}
     executable = os.access(path, os.X_OK)
     file_text = probe(["file", str(path)]) if shutil_which("file") else ""
-    version = probe([str(path), "--version"]) if executable else ""
+    version = probe_version(path) if executable else ""
     return {
         "exists": True,
         "executable": executable,
@@ -186,6 +208,8 @@ report = {
     },
     "tools": {
         "usearch": tool_status(root / "bin" / "usearch"),
+        "usearch_arm64": tool_status(root / "bin" / "usearch_osx_m_12.0-beta"),
+        "usearch_x86_64": tool_status(root / "bin" / "usearch_osx_x86_12.0-beta"),
         "vsearch": tool_status(root / "bin" / "vsearch"),
     },
 }
@@ -205,7 +229,8 @@ fi
 
 ARCH="$(uname -m)"
 if [[ "$ARCH" == "arm64" ]]; then
-  warn "Apple Silicon detected. If the bundled USEARCH/VSEARCH binaries are Intel-only, install Rosetta 2."
+  ok "Architecture: Apple Silicon arm64."
+  warn "Bundled VSEARCH is x86_64; install Rosetta 2 if macOS cannot run it."
   warn "Rosetta command: softwareupdate --install-rosetta --agree-to-license"
 else
   ok "Architecture: $ARCH"
@@ -219,13 +244,19 @@ log "Checking release files"
 [[ -f requirements-webui.txt ]] || fail "requirements-webui.txt is missing."
 [[ -f database/rdp_16s_v18.fa ]] || fail "database/rdp_16s_v18.fa is missing."
 [[ -f bin/usearch ]] || fail "bin/usearch is missing."
+[[ -f bin/usearch_osx_m_12.0-beta ]] || fail "bin/usearch_osx_m_12.0-beta is missing."
+[[ -f bin/usearch_osx_x86_12.0-beta ]] || fail "bin/usearch_osx_x86_12.0-beta is missing."
 [[ -f bin/vsearch ]] || fail "bin/vsearch is missing."
 ok "Required files are present."
 
 log "Preparing executable permissions"
-chmod +x bin/usearch bin/vsearch
+chmod +x bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
 if command -v xattr >/dev/null 2>&1; then
-  xattr -dr com.apple.quarantine bin/usearch bin/vsearch 2>/dev/null || true
+  xattr -dr com.apple.quarantine \
+    bin/usearch \
+    bin/usearch_osx_m_12.0-beta \
+    bin/usearch_osx_x86_12.0-beta \
+    bin/vsearch 2>/dev/null || true
 fi
 ok "USEARCH and VSEARCH are executable."
 
@@ -250,10 +281,18 @@ if [[ "$DIAGNOSTICS_ONLY" -eq 0 && "$SKIP_PIP" -eq 0 ]]; then
     pip_args+=("-i" "https://pypi.tuna.tsinghua.edu.cn/simple")
   fi
 
-  "$PYTHON_EXE" -m pip install "${pip_args[@]}" --upgrade pip setuptools wheel
-  "$PYTHON_EXE" -m pip install "${pip_args[@]}" -r requirements.txt -r requirements-webui.txt
+  pip_install() {
+    if [[ ${#pip_args[@]} -gt 0 ]]; then
+      "$PYTHON_EXE" -m pip install "${pip_args[@]}" "$@"
+    else
+      "$PYTHON_EXE" -m pip install "$@"
+    fi
+  }
+
+  pip_install --upgrade pip setuptools wheel
+  pip_install -r requirements.txt -r requirements-webui.txt
   if [[ "$INSTALL_SKILLS" -eq 1 ]]; then
-    "$PYTHON_EXE" -m pip install "${pip_args[@]}" -r requirements-skills.txt
+    pip_install -r requirements-skills.txt
   fi
   ok "Python dependencies are installed."
 else

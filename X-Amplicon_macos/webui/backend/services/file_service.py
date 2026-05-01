@@ -30,6 +30,10 @@ HTML_LINK_ATTR_PATTERN = re.compile(
     r"(?P<prefix>\b(?:src|href)\s*=\s*)(?P<quote>[\"'])(?P<url>.*?)(?P=quote)",
     flags=re.IGNORECASE,
 )
+HTML_SCRIPT_STYLE_PATTERN = re.compile(
+    r"(?P<open><(?:script|style)\b[^>]*>)(?P<body>.*?)(?P<close></(?:script|style)\s*>)",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def _should_rewrite_html_url(url: str) -> bool:
@@ -92,7 +96,19 @@ def rewrite_html_links_for_file_view(
         rewritten = f"{route_prefix}?{urlencode(query, quote_via=quote)}{fragment}"
         return f"{prefix}{quote_char}{html.escape(rewritten, quote=True)}{quote_char}"
 
-    return HTML_LINK_ATTR_PATTERN.sub(replace, html_text)
+    def rewrite_chunk(chunk: str) -> str:
+        return HTML_LINK_ATTR_PATTERN.sub(replace, chunk)
+
+    pieces: list[str] = []
+    cursor = 0
+    for match in HTML_SCRIPT_STYLE_PATTERN.finditer(html_text):
+        pieces.append(rewrite_chunk(html_text[cursor:match.start()]))
+        pieces.append(rewrite_chunk(match.group("open")))
+        pieces.append(match.group("body"))
+        pieces.append(match.group("close"))
+        cursor = match.end()
+    pieces.append(rewrite_chunk(html_text[cursor:]))
+    return "".join(pieces)
 
 
 def authorized_roots(

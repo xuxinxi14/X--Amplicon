@@ -2797,7 +2797,7 @@ cli.add_command(differential_abundance, "taxonomy-stats")
     "--usearch-path",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=str),
-    help="Optional explicit path to the USEARCH executable.",
+    help="Deprecated; representative FASTA extraction is handled internally.",
 )
 @click.option(
     "--table-path",
@@ -2929,13 +2929,13 @@ def otutab_filter(
     "--stats-path",
     default=None,
     type=click.Path(dir_okay=False, path_type=str),
-    help="Optional output path for usearch -otutab_stats results.",
+    help="Optional output path for Python-generated OTU table statistics.",
 )
 @click.option(
     "--usearch-path",
     default=None,
     type=click.Path(exists=True, dir_okay=False, path_type=str),
-    help="Optional explicit path to the USEARCH executable.",
+    help="Deprecated; OTU table statistics are generated internally.",
 )
 def otutab_rare(
     input_table: str,
@@ -2946,7 +2946,7 @@ def otutab_rare(
     stats_path: str | None,
     usearch_path: str | None,
 ) -> None:
-    """Rarefy an OTU table, compute alpha diversity, and run otutab_stats."""
+    """Rarefy an OTU table, compute alpha diversity, and write OTU table stats."""
 
     try:
         click.echo("[CLI] Starting OTU table rarefaction workflow.")

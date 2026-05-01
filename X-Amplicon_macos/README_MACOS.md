@@ -1,15 +1,17 @@
 # X-Amplicon macOS Preview
 
 This directory is the macOS release workspace for X-Amplicon. It contains the
-X-Amplicon Python/Web UI code, the small RDP 16S reference database, and the
-validated macOS USEARCH/VSEARCH binaries.
+X-Amplicon Python/Web UI code, the small RDP 16S reference database, validated
+macOS USEARCH 12 binaries for Intel and Apple Silicon, and bundled VSEARCH.
 
 ## Included Layout
 
 ```text
-X-Amplicon_mac/
+X-Amplicon_macos/
   bin/
     usearch
+    usearch_osx_m_12.0-beta
+    usearch_osx_x86_12.0-beta
     vsearch
   database/
     rdp_16s_v18.fa
@@ -25,7 +27,7 @@ X-Amplicon_mac/
 ```
 
 User FASTQ files, metadata, analysis outputs, API keys, and large SILVA
-databases are not included by default.
+databases are not included by default and remain ignored by git.
 
 ## System Requirements
 
@@ -45,7 +47,9 @@ or install Python from:
 https://www.python.org/downloads/macos/
 ```
 
-On Apple Silicon, if the bundled binaries are Intel-only, install Rosetta 2:
+On Apple Silicon, `bin/usearch` uses the bundled arm64 USEARCH binary. The
+bundled VSEARCH binary is currently x86_64; install Rosetta 2 if macOS cannot
+run it:
 
 ```bash
 softwareupdate --install-rosetta --agree-to-license
@@ -56,7 +60,8 @@ softwareupdate --install-rosetta --agree-to-license
 From this directory:
 
 ```bash
-chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh bin/usearch bin/vsearch
+chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
+  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
 ./setup_macos.sh
 ```
 
@@ -72,12 +77,19 @@ If you need optional RAG, tracing, and evaluation dependencies:
 ./setup_macos.sh --with-skills
 ```
 
-The setup script creates `.venv/`, prepares `bin/usearch` and `bin/vsearch`,
-removes macOS quarantine attributes when possible, writes macOS Web UI defaults
-to `.xamplicon_webui/settings.json`, and writes diagnostics to:
+The setup script creates `.venv/`, prepares `bin/usearch`, both USEARCH 12
+binaries, and `bin/vsearch`, removes macOS quarantine attributes when possible,
+writes macOS Web UI defaults to `.xamplicon_webui/settings.json`, and writes
+diagnostics to:
 
 ```text
 run_logs/macos_setup_diagnostics.json
+```
+
+To verify the release files without installing Python packages:
+
+```bash
+./setup_macos.sh --diagnostics-only
 ```
 
 ## Web UI
@@ -94,11 +106,21 @@ Default URL:
 http://127.0.0.1:8765
 ```
 
+Common startup options:
+
+```bash
+./start_webui.sh --no-browser
+./start_webui.sh --port 8770
+./start_webui.sh --repair-deps
+./start_webui.sh --build-frontend
+```
+
 If macOS blocks a binary because it came from the internet, run:
 
 ```bash
-xattr -dr com.apple.quarantine bin/usearch bin/vsearch
-chmod +x bin/usearch bin/vsearch
+xattr -dr com.apple.quarantine \
+  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
+chmod +x bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
 ```
 
 ## CLI Pipeline Test
@@ -106,7 +128,7 @@ chmod +x bin/usearch bin/vsearch
 Place or upload test data as:
 
 ```text
-X-Amplicon_mac/
+X-Amplicon_macos/
   metadata.txt
   seq/
     KO1_1.fq.gz
@@ -150,9 +172,19 @@ API base URL, and model.
 ## Notes
 
 - `bin/usearch` and `bin/vsearch` are placed on `PATH` by the launcher scripts.
+- `bin/usearch` is a wrapper. On Apple Silicon it runs
+  `bin/usearch_osx_m_12.0-beta`; on Intel macOS it runs
+  `bin/usearch_osx_x86_12.0-beta`. Keep `pipeline_params.macos.yaml` pointed at
+  `bin/usearch`.
+- USEARCH 12 does not behave like older releases for every legacy command. The
+  representative FASTA subset in `otutab-filter` and the OTU table statistics in
+  `otutab-rare` are generated internally by Python for USEARCH 12 compatibility.
+- USEARCH 12 may print its version only when run without `--version`; use
+  `./setup_macos.sh --diagnostics-only` for a reliable tool check.
 - `pipeline_params.macos.yaml` uses `bin/usearch` and `bin/vsearch`.
 - The bundled Web UI frontend build is used when `webui/frontend/dist/index.html`
-  exists. If it is missing, install Node.js 20+ and run:
+  exists. If it is missing, `start_webui.sh` builds it automatically unless
+  `--no-build` is used. You can also install Node.js 20+ and run:
 
 ```bash
 ./start_webui.sh --build-frontend
