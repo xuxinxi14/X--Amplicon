@@ -24,7 +24,9 @@ from webui.backend.services.job_manager import manager
 from webui.backend.services.metadata_validator import validate_metadata
 from webui.backend.services.params_writer import write_pipeline_params
 from webui.backend.services.project_store import (
+    clear_projects,
     create_project,
+    delete_project,
     get_project,
     list_projects,
     update_project,
@@ -50,7 +52,7 @@ class FastqPairingRequest(BaseModel):
 
 
 class VisualizationJobRequest(BaseModel):
-    output_format: str = "html"
+    output_format: str = "all"
     metadata: str | None = None
     color_palette: str | None = None
 
@@ -58,7 +60,7 @@ class VisualizationJobRequest(BaseModel):
 class DifferentialJobRequest(BaseModel):
     comparisons: list[str] = []
     reference_group: str | None = None
-    output_format: str = "html"
+    output_format: str = "all"
     group_col: str = "Group"
     sample_id_col: str = "SampleID"
 
@@ -74,7 +76,7 @@ def _ensure_params(project: ProjectRecord) -> ProjectRecord:
     if project.params_path:
         return project
     result = write_pipeline_params(project)
-    return update_project(project.id, {"params_path": result.params_path})
+    return update_project(project.id, {"params_path": result.params_path, "last_preflight_job_id": None})
 
 
 def _load_params_extras(project: ProjectRecord) -> dict[str, dict]:
@@ -111,6 +113,17 @@ def _as_optional_string(value: object) -> str | None:
     return text or None
 
 
+def _require_completed_preflight(project: ProjectRecord) -> None:
+    if not project.last_preflight_job_id:
+        raise HTTPException(status_code=409, detail="Preflight must complete successfully before starting full analysis.")
+    try:
+        job = manager.get_job(project.last_preflight_job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=409, detail="Preflight record was not found. Run preflight again.") from exc
+    if job.job_type != "preflight" or job.status != "completed":
+        raise HTTPException(status_code=409, detail="Preflight must complete successfully before starting full analysis.")
+
+
 def _full_analysis_commands(project: ProjectRecord) -> list[tuple[str, CommandSpec]]:
     settings = load_settings()
     final_dir = final_dir_for_project(project)
@@ -118,7 +131,7 @@ def _full_analysis_commands(project: ProjectRecord) -> list[tuple[str, CommandSp
     visualization = extras.get("visualization", {})
     differential = extras.get("differential", {})
     metadata = str(resolve_path(project.metadata_path, project.project_dir)) if project.metadata_path else None
-    output_format = str(visualization.get("output_format") or settings.default_plot_format or "html")
+    output_format = str(visualization.get("output_format") or settings.default_plot_format or "all")
 
     commands: list[tuple[str, CommandSpec]] = [
         ("pipeline", command_builder.run_pipeline_config(project.params_path or "", settings)),
@@ -138,6 +151,7 @@ def _full_analysis_commands(project: ProjectRecord) -> list[tuple[str, CommandSp
 
     comparisons = _as_string_list(differential.get("comparisons"))
     reference_group = _as_optional_string(differential.get("reference_group"))
+    differential_format = str(differential.get("output_format") or settings.default_plot_format or "all")
     if metadata and (comparisons or reference_group):
         commands.append(
             (
@@ -149,7 +163,7 @@ def _full_analysis_commands(project: ProjectRecord) -> list[tuple[str, CommandSp
                     taxonomy=str(final_dir / "taxonomy.tsv"),
                     comparisons=comparisons,
                     reference_group=reference_group,
-                    output_format=str(differential.get("output_format") or settings.default_plot_format or "html"),
+                    output_format=differential_format,
                     group_col=str(differential.get("group_col") or project.group_col),
                     sample_id_col=str(differential.get("sample_id_col") or project.sample_id_col),
                     settings=settings,
@@ -177,6 +191,27 @@ def post_project(payload: ProjectCreate) -> ProjectRecord:
 @router.get("/{project_id}", response_model=ProjectRecord)
 def get_project_record(project_id: str) -> ProjectRecord:
     return _project_or_404(project_id)
+
+
+@router.delete("/{project_id}", status_code=204)
+def delete_project_record(project_id: str) -> None:
+    _project_or_404(project_id)
+    try:
+        manager.delete_jobs_for_project(project_id)
+        delete_project(project_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.delete("")
+def clear_project_records() -> dict[str, int]:
+    try:
+        deleted_jobs = manager.clear_job_history()
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"deleted": clear_projects(), "deleted_jobs": deleted_jobs}
 
 
 @router.put("/{project_id}", response_model=ProjectRecord)
@@ -246,7 +281,7 @@ def post_write_params(project_id: str, payload: PipelineParamsDraft | None = Non
         result = write_pipeline_params(project, payload)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    update_project(project_id, {"params_path": result.params_path})
+    update_project(project_id, {"params_path": result.params_path, "last_preflight_job_id": None})
     return result
 
 
@@ -256,13 +291,14 @@ def post_preflight(project_id: str) -> JobRecord:
     settings = load_settings()
     command = command_builder.check_pipeline_config(project.params_path or "", settings)
     record = manager.start_job(job_type="preflight", command=command, project_id=project_id, initial_status="checking")
-    update_project(project_id, {"last_job_id": record.id})
+    update_project(project_id, {"last_job_id": record.id, "last_preflight_job_id": record.id})
     return record
 
 
 @router.post("/{project_id}/run", response_model=JobRecord)
 def post_run(project_id: str) -> JobRecord:
     project = _ensure_params(_project_or_404(project_id))
+    _require_completed_preflight(project)
     commands = _full_analysis_commands(project)
     record = manager.start_sequence_job(
         job_type="full_analysis",

@@ -740,7 +740,13 @@ def _build_beta_heatmap(
             x=ordered_samples,
             y=ordered_samples,
             colorscale="RdYlBu_r",
-            colorbar={"title": "Distance"},
+            colorbar={
+                "title": {"text": "Distance", "side": "right"},
+                "x": 1.02,
+                "y": 0.42,
+                "len": 0.74,
+                "thickness": 28,
+            },
             customdata=customdata,
             hovertemplate=(
                 "%{customdata[0]} vs %{customdata[1]}<br>"
@@ -776,7 +782,13 @@ def _build_beta_heatmap(
         width=980,
         height=860,
         legend_title_text="Group",
-        margin={"l": 80, "r": 120, "t": 90, "b": 90},
+        legend={
+            "x": 1.07,
+            "xanchor": "left",
+            "y": 1.0,
+            "yanchor": "top",
+        },
+        margin={"l": 80, "r": 170, "t": 105, "b": 90},
     )
     apply_publication_theme(fig, width=980, height=860)
     fig.update_xaxes(tickangle=90, row=2, col=1)

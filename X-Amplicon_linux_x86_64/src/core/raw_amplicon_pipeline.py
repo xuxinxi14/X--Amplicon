@@ -18,6 +18,7 @@ from src.utils.provenance import (
     write_json_record,
     write_provenance_markdown,
 )
+from src.utils.command_runner import run_command
 
 from .alpha_diversity import (
     calculate_alpha_diversity,
@@ -39,7 +40,11 @@ from .usearch_otu_cluster import run_usearch_otu_clustering
 from .vsearch_otu_cluster import run_vsearch_otu_clustering
 from .vsearch_sintax import run_vsearch_sintax
 from .vsearch_uchime_ref import run_vsearch_uchime_ref
-from .workflow_common import ensure_input_file
+from .workflow_common import (
+    DEFAULT_VSEARCH_WINDOWS_PATH,
+    ensure_input_file,
+    resolve_executable,
+)
 
 FEATURE_METHOD_ASV = "usearch-asv"
 FEATURE_METHOD_USEARCH_OTU = "usearch-otu"
@@ -49,6 +54,9 @@ VALID_FEATURE_METHODS = {
     FEATURE_METHOD_USEARCH_OTU,
     FEATURE_METHOD_VSEARCH_OTU,
 }
+MERGE_BACKEND_VSEARCH = "vsearch"
+MERGE_BACKEND_PYTHON = "python"
+VALID_MERGE_BACKENDS = {MERGE_BACKEND_VSEARCH, MERGE_BACKEND_PYTHON}
 WORK_SUBDIRS = {
     "input": "00_input",
     "merged": "01_merged",
@@ -111,6 +119,13 @@ def _resolve_filter_route(route: str) -> str:
     normalized = str(route).strip().lower()
     if normalized not in {ROUTE_16S, ROUTE_ITS, ROUTE_NONE}:
         raise ValueError("filter_route must be one of: 16s, its, none.")
+    return normalized
+
+
+def _resolve_merge_backend(merge_backend: str) -> str:
+    normalized = str(merge_backend).strip().lower()
+    if normalized not in VALID_MERGE_BACKENDS:
+        raise ValueError("merge_backend must be one of: vsearch, python.")
     return normalized
 
 
@@ -379,6 +394,7 @@ def _build_effective_params(
     threads: int,
     read1_suffix: str,
     read2_suffix: str,
+    merge_backend: str,
     usearch_path: Optional[str],
     vsearch_path: Optional[str],
     beta_tree_path: Optional[str],
@@ -391,6 +407,7 @@ def _build_effective_params(
     normalized_vsearch_path = _normalize_optional_path(vsearch_path)
     normalized_beta_tree_path = _normalize_optional_tree_path(beta_tree_path)
     normalized_params_source = _normalize_optional_path(params_source)
+    resolved_merge_backend = _resolve_merge_backend(merge_backend)
 
     return {
         "metadata_path": os.path.abspath(metadata_path),
@@ -412,6 +429,7 @@ def _build_effective_params(
         "threads": threads,
         "read1_suffix": read1_suffix,
         "read2_suffix": read2_suffix,
+        "merge_backend": resolved_merge_backend,
         "usearch_path": (
             None
             if normalized_usearch_path is None
@@ -644,6 +662,51 @@ def _prefix_fastq_headers(path: str, sample_id: str) -> None:
         raise
 
 
+def _run_vsearch_mergepairs(
+    *,
+    read1_path: str,
+    read2_path: str,
+    output_path: str,
+    vsearch_path: Optional[str],
+    threads: int,
+    command_timeout: Optional[float],
+) -> dict[str, Any]:
+    resolved_vsearch = resolve_executable(
+        "vsearch",
+        configured_path=vsearch_path,
+        windows_default_path=DEFAULT_VSEARCH_WINDOWS_PATH,
+        label="VSEARCH",
+    )
+    command = [
+        resolved_vsearch,
+        "--fastq_mergepairs",
+        read1_path,
+        "--reverse",
+        read2_path,
+        "--fastqout",
+        output_path,
+        "--threads",
+        str(int(threads)),
+        "--fastq_minovlen",
+        "10",
+        "--fastq_maxdiffs",
+        "10",
+        "--fastq_minmergelen",
+        "0",
+        "--fastq_maxmergelen",
+        "1000000",
+    ]
+    result = run_command(command, timeout=command_timeout)
+    return {
+        "backend": MERGE_BACKEND_VSEARCH,
+        "read1_path": read1_path,
+        "read2_path": read2_path,
+        "output_path": output_path,
+        "command": list(result.command),
+        "returncode": result.returncode,
+    }
+
+
 def _execute_pipeline_step(
     context: PipelineContext,
     name: str,
@@ -761,6 +824,7 @@ def _step_validate_inputs(
     threads: int,
     read1_suffix: str,
     read2_suffix: str,
+    merge_backend: str,
     usearch_path: Optional[str],
     vsearch_path: Optional[str],
     beta_tree_path: Optional[str],
@@ -779,6 +843,7 @@ def _step_validate_inputs(
     )
     resolved_feature_method = _resolve_feature_method(feature_method)
     resolved_filter_route = _resolve_filter_route(filter_route)
+    resolved_merge_backend = _resolve_merge_backend(merge_backend)
     sample_ids = _read_sample_ids(resolved_metadata_path)
     read_pairs = _resolve_read_pairs(
         resolved_seq_dir,
@@ -795,6 +860,7 @@ def _step_validate_inputs(
             "beta_tree_path": resolved_beta_tree_path,
             "feature_method": resolved_feature_method,
             "filter_route": resolved_filter_route,
+            "merge_backend": resolved_merge_backend,
             "rarefaction_depth": int(rarefaction_depth),
             "rarefaction_seed": int(rarefaction_seed),
         }
@@ -827,6 +893,7 @@ def _step_validate_inputs(
         threads=threads,
         read1_suffix=read1_suffix,
         read2_suffix=read2_suffix,
+        merge_backend=resolved_merge_backend,
         usearch_path=usearch_path,
         vsearch_path=vsearch_path,
         beta_tree_path=resolved_beta_tree_path,
@@ -841,6 +908,7 @@ def _step_validate_inputs(
     print(f"[RAW PIPELINE] Sequence directory: {resolved_seq_dir}")
     print(f"[RAW PIPELINE] Output root: {context.work_dirs['root']}")
     print(f"[RAW PIPELINE] Feature method: {resolved_feature_method}")
+    print(f"[RAW PIPELINE] Merge backend: {resolved_merge_backend}")
     print(f"[RAW PIPELINE] OTU table method: {otutab_method}")
     print(f"[RAW PIPELINE] Annotation database: {annotation_database}")
     print(f"[RAW PIPELINE] Filter route: {resolved_filter_route}")
@@ -854,13 +922,23 @@ def _step_validate_inputs(
         "sample_count": len(sample_ids),
         "matched_read_pairs": len(read_pairs),
         "beta_tree_path": resolved_beta_tree_path,
+        "merge_backend": resolved_merge_backend,
         "rarefaction_depth": int(rarefaction_depth),
         "rarefaction_seed": int(rarefaction_seed),
     }
 
 
 def _step_merge_pairs(context: PipelineContext) -> dict[str, Any]:
-    mergepairs = _load_vendor_fastq_mergepairs()
+    merge_backend = _resolve_merge_backend(
+        str(context.resolved.get("merge_backend", MERGE_BACKEND_VSEARCH))
+    )
+    mergepairs = (
+        _load_vendor_fastq_mergepairs()
+        if merge_backend == MERGE_BACKEND_PYTHON
+        else None
+    )
+    effective_params = context.summary.get("effective_params", {})
+    assert isinstance(effective_params, dict)
     merged_fastq_paths: list[str] = []
     merge_summaries: list[Dict[str, Any]] = []
 
@@ -869,11 +947,31 @@ def _step_merge_pairs(context: PipelineContext) -> dict[str, Any]:
             context.work_dirs["merged"],
             f"{sample_id}.merged.fq",
         )
-        merge_summary = mergepairs(
-            read1_path=read1_path,
-            read2_path=read2_path,
-            output_path=merged_fastq_path,
-        )
+        if merge_backend == MERGE_BACKEND_PYTHON:
+            assert mergepairs is not None
+            merge_summary = mergepairs(
+                read1_path=read1_path,
+                read2_path=read2_path,
+                output_path=merged_fastq_path,
+            )
+            merge_summary = {"backend": MERGE_BACKEND_PYTHON, **merge_summary}
+        else:
+            merge_summary = _run_vsearch_mergepairs(
+                read1_path=read1_path,
+                read2_path=read2_path,
+                output_path=merged_fastq_path,
+                vsearch_path=(
+                    None
+                    if effective_params.get("vsearch_path") is None
+                    else str(effective_params["vsearch_path"])
+                ),
+                threads=int(effective_params.get("threads", 1)),
+                command_timeout=(
+                    None
+                    if effective_params.get("command_timeout") is None
+                    else float(effective_params["command_timeout"])
+                ),
+            )
         _prefix_fastq_headers(merged_fastq_path, sample_id)
         merge_summaries.append({"sample_id": sample_id, **merge_summary})
         merged_fastq_paths.append(merged_fastq_path)
@@ -888,6 +986,7 @@ def _step_merge_pairs(context: PipelineContext) -> dict[str, Any]:
         "merged_fastq_files": merged_fastq_paths,
         "merged_fastq_bundle": all_fastq_path,
         "sample_count": len(merged_fastq_paths),
+        "backend": merge_backend,
     }
 
 
@@ -1206,6 +1305,7 @@ def run_raw_amplicon_pipeline(
     threads: int = 1,
     read1_suffix: str = "_1.fq.gz",
     read2_suffix: str = "_2.fq.gz",
+    merge_backend: str = MERGE_BACKEND_VSEARCH,
     usearch_path: Optional[str] = None,
     vsearch_path: Optional[str] = None,
     beta_tree_path: Optional[str] = None,
@@ -1218,6 +1318,7 @@ def run_raw_amplicon_pipeline(
 
     usearch_path = _normalize_optional_path(usearch_path)
     vsearch_path = _normalize_optional_path(vsearch_path)
+    merge_backend = _resolve_merge_backend(merge_backend)
     beta_tree_path = _normalize_optional_tree_path(beta_tree_path)
     params_source = _normalize_optional_path(params_source)
     work_dirs = _prepare_work_dirs(output_root)
@@ -1257,6 +1358,7 @@ def run_raw_amplicon_pipeline(
                 threads=threads,
                 read1_suffix=read1_suffix,
                 read2_suffix=read2_suffix,
+                merge_backend=merge_backend,
                 usearch_path=usearch_path,
                 vsearch_path=vsearch_path,
                 beta_tree_path=beta_tree_path,
@@ -1296,6 +1398,7 @@ def run_raw_amplicon_pipeline(
                 threads=threads,
                 read1_suffix=read1_suffix,
                 read2_suffix=read2_suffix,
+                merge_backend=merge_backend,
                 usearch_path=usearch_path,
                 vsearch_path=vsearch_path,
                 beta_tree_path=beta_tree_path,

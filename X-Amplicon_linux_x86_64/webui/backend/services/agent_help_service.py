@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import re
+from pathlib import Path
 from typing import Any
 
 from agent.config import AgentConfig
@@ -25,6 +26,17 @@ AGENT_CAPABILITIES = [
     "parameter_guidance",
     "reproducible_command_suggestions",
 ]
+
+WEBUI_GUIDANCE_SKILL_PATH = (
+    Path(__file__).resolve().parents[3] / "agent" / "skills" / "webui_guidance" / "skill.md"
+)
+
+
+def _load_webui_guidance_skill() -> str:
+    try:
+        return WEBUI_GUIDANCE_SKILL_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return ""
 
 
 def _provider_from_model(model: str) -> str:
@@ -133,11 +145,11 @@ def _rule_based_chat(request: AgentChatRequest, *, mode: str = "rule_based", war
             if zh else
             "If an older job was marked completed but produced no plots, it usually ran only the data-processing stage and did not continue to visualization-suite and generate-report. The current Web UI full-analysis job continues to plots and report after the pipeline finishes. For older outputs, rerun full analysis or generate the report from Results."
         )
-    elif _contains(context, "start", "begin", "开始", "新建", "分析"):
+    elif _contains(context, "start", "begin", "web ui", "webui", "开始", "新建", "新建分析", "16s 分析", "16s分析", "怎么用", "如何使用", "按钮在哪", "向导式分析"):
         message = (
-            "建议先从“新建分析”创建项目。第一步只需要确认项目目录、metadata 文件和 FASTQ 文件夹；随后运行 metadata 与 FASTQ 配对检查。检查通过后再设置分组和差异比较，最后先跑 preflight，再启动完整分析。"
+            "建议从左侧导航进入“新建分析”。先在第 1 步“项目”填写项目名称、项目目录和输出目录，然后点击“创建项目”。进入第 2 步后选择 metadata 文件和 FASTQ 文件夹，点击“检查 metadata”和“预览 FASTQ 配对”。检查通过后在“样本分组”确认 Group 和差异比较方向，再到“检查并运行”先运行 preflight；preflight 成功后再启动完整分析。完成后到“运行监控”查看任务状态，再到“结果”选择项目并刷新，查看图表、报告和 provenance。"
             if zh else
-            "Start from New Analysis. First confirm the project directory, metadata file, and FASTQ folder, then run metadata and FASTQ pairing checks. After those pass, set groups and optional comparisons, run preflight, then start the full analysis."
+            "Use the left navigation to open New Analysis. In step 1, fill the project name, project directory, and output folder, then click Create project. In step 2, choose the metadata file and FASTQ folder, then run metadata validation and FASTQ pairing preview. After checks pass, confirm groups and differential comparisons, run preflight in the final step, then start the full analysis. When it finishes, use Run Monitor for status and Results for plots, report, and provenance."
         )
     elif _contains(context, "metadata", "sampleid", "sample id", "group"):
         message = (
@@ -203,6 +215,7 @@ def _llm_chat(request: AgentChatRequest) -> AgentChatResponse:
     from litellm import completion  # type: ignore[import-not-found]
 
     language = "Chinese" if request.language == "Chinese" else "English"
+    webui_guidance = _load_webui_guidance_skill()
     system_prompt = (
         "You are X-Amplicon Agent, a specialist assistant for Windows-first 16S rRNA amplicon analysis. "
         "You are built on a deterministic X-Amplicon workflow that handles paired-end FASTQ input, metadata checks, "
@@ -211,11 +224,17 @@ def _llm_chat(request: AgentChatRequest) -> AgentChatResponse:
         "Use the selected project context when provided, but never invent files, sample groups, or completed results. "
         "Never claim that you executed commands or changed files from this chat. Keep advice practical for bench scientists. "
         "When useful, mention the exact Web UI page or deterministic CLI command. "
+        "For Web UI guidance, state the page, area, button, and expected success signal. "
+        "If the user's current page is unknown, ask them to use the left navigation to open the relevant page. "
+        "Do not recommend deleting work/, work/06_final, or real analysis output files. "
+        "Return compact JSON only, without markdown fences or prose outside JSON. "
+        "The JSON keys must be: message, suggested_actions, suggested_commands, warnings. "
         f"Reply in {language}; keep technical terms such as FASTQ, metadata, preflight, OTU/ASV, PCoA, and provenance in English when clearer."
     )
     context_prompt = {
         "language": language,
         "project_summary": request.project_summary[:5000],
+        "webui_guidance_skill": webui_guidance[:12000],
         "response_contract": {
             "message": "natural language answer",
             "suggested_actions": ["short actionable UI steps"],
@@ -246,6 +265,17 @@ def _llm_chat(request: AgentChatRequest) -> AgentChatResponse:
     content = str(response.choices[0].message.content or "").strip()
     if not content:
         return _rule_based_chat(request, mode="fallback", warning="LLM returned an empty response.")
+
+    parsed = _safe_json_response(content)
+    if parsed:
+        return AgentChatResponse(
+            status="ok",
+            mode="llm",
+            message=str(parsed.get("message") or content),
+            suggested_actions=_json_list(parsed.get("suggested_actions")),
+            suggested_commands=_json_list(parsed.get("suggested_commands")),
+            warnings=_json_list(parsed.get("warnings")),
+        )
 
     return AgentChatResponse(
         status="ok",
@@ -289,6 +319,12 @@ def _unique(items: list[str]) -> list[str]:
     return result
 
 
+def _json_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value if str(item).strip()]
+
+
 def _commands_for_context(context_type: str) -> list[str]:
     if context_type == "metadata":
         return [
@@ -305,12 +341,12 @@ def _commands_for_context(context_type: str) -> list[str]:
         ]
     if context_type == "results":
         return [
-            "python process.py visualization-suite --output-root work",
+            "python process.py visualization-suite --final-dir work\\06_final",
             "python process.py generate-report --final-dir work\\06_final",
         ]
     if context_type == "differential":
         return [
-            "python process.py differential-abundance --metadata metadata.txt --otu-table work\\06_final\\otutab.txt --comparisons KO:WT",
+            "python process.py differential-abundance --metadata metadata.txt --otutab work\\06_final\\otutab.txt --compare KO:WT",
         ]
     return [
         "python process.py check-pipeline-config --params pipeline_params.webui.yaml",
@@ -444,18 +480,26 @@ def _rule_based_explanation(request: AgentExplainRequest, *, mode: str = "rule_b
 
 
 def _safe_json_response(text: str) -> dict[str, Any] | None:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", stripped, flags=re.DOTALL | re.IGNORECASE)
+        if fenced:
+            stripped = fenced.group(1).strip()
     try:
-        loaded = json.loads(text)
+        loaded = json.loads(stripped)
         return loaded if isinstance(loaded, dict) else None
     except json.JSONDecodeError:
-        match = re.search(r"\{.*\}", text, flags=re.DOTALL)
-        if not match:
-            return None
-        try:
-            loaded = json.loads(match.group(0))
-            return loaded if isinstance(loaded, dict) else None
-        except json.JSONDecodeError:
-            return None
+        decoder = json.JSONDecoder()
+        for index, char in enumerate(stripped):
+            if char != "{":
+                continue
+            try:
+                loaded, _ = decoder.raw_decode(stripped[index:])
+            except json.JSONDecodeError:
+                continue
+            if isinstance(loaded, dict):
+                return loaded
+        return None
 
 
 def _llm_explanation(request: AgentExplainRequest) -> AgentExplainResponse:

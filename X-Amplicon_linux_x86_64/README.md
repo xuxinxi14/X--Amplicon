@@ -1,12 +1,13 @@
 [English](README.md) | [中文](README_zh.md)
 
-# X-Amplicon
+# 🧬 X-Amplicon
+**Author:** XinXi Xu
 
 X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with a Linux x86_64 server package for command-line and browser-based deployment. It turns paired-end FASTQ files and a metadata table into OTU/ASV tables, taxonomy annotation, alpha/beta diversity, publication-ready visualizations, differential abundance plots, reports, and reproducibility records.
 
-The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequencing files on your computer, guides users step by step, and calls the same deterministic Python workflow as the CLI. An LLM API key is optional.
+> 💡 **Recommended workflow:** Use the local browser Web UI. Your sequencing files never leave your computer, the wizard guides you step by step, and everything runs through the same deterministic Python workflow as the CLI. An LLM API key is entirely optional.
 
-## Highlights
+## ✨ Highlights
 
 - Local Windows Web UI for wet-lab users.
 - One-click Windows installer with bundled Python, RDP 16S database, USEARCH/VSEARCH, and prebuilt Web UI.
@@ -17,9 +18,12 @@ The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequ
 - Optional LLM configuration from the Web UI: API key, API base URL, and model selection.
 - Outputs include Plotly charts, report HTML/Markdown, `run_summary.json`, and provenance files.
 
-## Quick Start: Windows Installer
+<img width="1014" height="671" alt="c1a4c08be4838b85f1ee997ea8b795b" src="https://github.com/user-attachments/assets/557330d5-e8ef-41a5-9ad1-2983c4d17f87" />
 
-For most users, download the Windows installer from GitHub Releases:
+
+## 🚀 Quick Start: Windows Installer
+
+The easiest way to get started is to download the Windows installer directly from GitHub Releases:
 
 ```text
 X-Amplicon-Setup-v0.1.0.exe
@@ -27,24 +31,24 @@ X-Amplicon-Setup-v0.1.0.exe
 
 Then:
 
-1. Double-click `X-Amplicon-Setup-v0.1.0.exe`.
-2. Follow the installer wizard. The default per-user install path is:
+1. Double-click `X-Amplicon-Setup-v0.1.0.exe` to launch the setup wizard.
+2. Follow the prompts. The default per-user install path is:
 
 ```text
 %LOCALAPPDATA%\Programs\X-Amplicon
 ```
 
-3. Launch **X-Amplicon Web UI** from the Start Menu or desktop shortcut.
+3. Launch **X-Amplicon Web UI** from the Start Menu or desktop shortcut — and you're ready to analyze!
 
-The installed launcher checks the bundled Python environment, verifies the small RDP database, and opens the local Web UI. The default address is:
+The launcher automatically verifies the bundled Python environment and RDP database, then opens the local Web UI. The default address is:
 
 ```text
 http://127.0.0.1:8765
 ```
 
-If the browser does not open automatically, copy the printed address into your browser.
+If the browser does not open automatically, just copy the address from the console and paste it into your browser.
 
-### What The Installer Includes
+### 📦 What the Installer Includes
 
 | Component | Installed path |
 | --- | --- |
@@ -56,17 +60,17 @@ If the browser does not open automatically, copy the printed address into your b
 | Prebuilt Web UI frontend | `webui\frontend\dist\` |
 | One-click launchers | `Start_X-Amplicon_WebUI.cmd`, `Start_X-Amplicon_WebUI.ps1` |
 
-The installer does not include user FASTQ data, analysis outputs, API keys, runtime state, `node_modules`, or large SILVA databases.
+The installer does not include user FASTQ data, analysis outputs, API keys, runtime state, `node_modules`, or large SILVA databases — all that stays yours.
 
-## Quick Start: Source Checkout
+## 🛠️ Quick Start: Source Checkout
 
-If you use the GitHub source repository instead of the Windows installer, install dependencies first:
+Prefer working from source? Install the dependencies first:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallWebUIDeps
 ```
 
-For slower PyPI access:
+If PyPI is slow in your region, use the China mirror:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -UseChinaMirror -InstallWebUIDeps
@@ -78,7 +82,7 @@ Start the Web UI:
 powershell -ExecutionPolicy Bypass -File .\start_webui.ps1
 ```
 
-Optional startup flags:
+Handy startup flags (change port or suppress auto-open):
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -Port 8770
@@ -136,20 +140,21 @@ Then open `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`.
 
 ## Web UI Workflow
 
-Use the Web UI in this order:
+Follow these steps in order for a smooth analysis experience:
 
-1. **Settings**: confirm Python, output directory, metadata path, FASTQ directory, USEARCH/VSEARCH paths, plot format, and optional LLM settings.
-2. **Agent**: follow the guided readiness checklist before starting analysis.
-3. **New Analysis**: create a project, select metadata and paired FASTQ files, validate sample matching, choose groups, set comparisons, and write parameters.
-4. **Run Monitor**: run preflight checks, start the full pipeline, inspect logs, and copy reproducible commands.
-5. **Results**: browse plots, tables, differential abundance results, reports, provenance, and files.
-6. **Databases**: check the bundled RDP database or register your own FASTA database.
+1. **Settings**: confirm your Python path, output directory, metadata path, FASTQ directory, USEARCH/VSEARCH paths, plot format, and any optional LLM settings.
+2. **Agent**: work through the guided readiness checklist to make sure everything is in order before kicking off the analysis.
+3. **New Analysis**: create a project, select your metadata and paired FASTQ files, validate sample matching, choose groups, define comparisons, and set parameters.
+4. **Run Monitor**: run preflight checks, launch the full pipeline, watch the live logs, and grab the reproducible commands for your records.
+5. **Results**: explore plots, tables, differential abundance results, reports, provenance files, and all outputs at a glance.
+6. **Databases**: inspect the bundled RDP database or register your own custom FASTA database.
 
-The Web UI does not upload sequencing files. Data, logs, and results stay local.
+The Web UI never uploads your sequencing files. All data, logs, and results stay on your machine.
 
-## Input Files
+## 📂 Input Files
+<img width="1583" height="674" alt="image" src="https://github.com/user-attachments/assets/d2a3cbf2-8e9b-4090-8392-332cd9a11116" />
 
-Typical project layout:
+A typical project layout looks like this:
 
 ```text
 your_project\
@@ -169,13 +174,14 @@ S1	WT
 S2	KO
 ```
 
-Requirements:
+Format requirements:
 
-- Metadata must be tab-separated text.
-- Sample IDs must match paired FASTQ names after removing the R1/R2 suffixes.
-- A group column such as `Group` is needed for diversity plots and differential comparisons.
+- Metadata must be a tab-separated text file (TSV).
+- Sample IDs must match paired FASTQ filenames after stripping the R1/R2 suffixes.
+- A group column such as `Group` is required for diversity plots and differential comparisons.
 
-## Output Files
+## 📊 Output Files
+<img width="1584" height="1179" alt="image" src="https://github.com/user-attachments/assets/a17feaf7-ac65-470c-bf5a-99824f5dd7d0" />
 
 The default output root is:
 
@@ -207,16 +213,17 @@ Generate `plots/` and `report/` afterward with `visualization-suite` and
 `generate-report`. Plot outputs are organized in subfolders instead of being
 placed together in one directory.
 
-## Optional LLM Agent
+## 🤖 Optional LLM Agent
+<img width="1586" height="1137" alt="image" src="https://github.com/user-attachments/assets/1a27c243-d392-446b-a0f9-9f0490c43efd" />
 
-The full analysis workflow works without an API key. To enable LLM-assisted guidance:
+The full analysis workflow runs perfectly without an API key. To unlock LLM-assisted guidance, follow these steps:
 
 1. Open **Settings** in the Web UI.
-2. Select or enter a LiteLLM-compatible model.
-3. Enter an OpenAI-compatible API base URL if needed.
-4. Enter the API key.
+2. Select or type a LiteLLM-compatible model name.
+3. Enter an OpenAI-compatible API base URL if you're using a proxy or custom gateway.
+4. Enter your API key and save.
 
-The key is saved locally to `.env` and is not returned to the browser by the settings API.
+Your key is saved locally to `.env` and is never sent back to the browser by the settings API — it stays safely on your machine.
 
 Equivalent `.env` fields:
 
@@ -226,9 +233,9 @@ LLM_API_KEY=your_key_here
 LLM_API_BASE=https://your-openai-compatible-endpoint/v1
 ```
 
-## CLI Usage
+## ⌨️ CLI Usage
 
-The Web UI is recommended for most users. The CLI remains available for reproducible scripts and automation.
+The Web UI is recommended for most users. The CLI is there when you need scripted, reproducible runs or automation.
 
 Run the standard workflow:
 
@@ -259,7 +266,7 @@ python agent_cli.py
 python agent_cli.py --offline
 ```
 
-Useful slash commands include `/params`, `/status`, `/tools`, `/language`, `/report`, `/config`, and `/quit`.
+Useful slash commands include `/params`, `/status`, `/tools`, `/language`, `/report`, `/config`, and `/quit`. Type `/help` at any time for the full list.
 
 ## Linux Packaging Options
 
@@ -287,7 +294,7 @@ Users unpack it, run `./setup_linux.sh`, then launch `./start_webui.sh --no-brow
 
 ## Dependencies
 
-The Windows installer already includes the runtime needed for ordinary use. Source users need:
+The Windows installer already includes everything needed for ordinary use. If you're building from source, install the following:
 
 | Category | Packages or tools |
 | --- | --- |
@@ -297,26 +304,26 @@ The Windows installer already includes the runtime needed for ordinary use. Sour
 | Optional Agent skills | `llama-index`, `deepeval`, `ragas`, `langchain-openai`, `opentelemetry-api`, `opentelemetry-sdk` |
 | External tools | USEARCH and VSEARCH |
 
-## Troubleshooting
+## 🔧 Troubleshooting
 
-If PowerShell blocks the launcher, run:
+**PowerShell blocking the launcher?** Run it with an explicit bypass:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1
 ```
 
-If the default port is occupied:
+**Default port already in use?** Pick a different one with `-Port`:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -Port 8770
 ```
 
-If an installed dependency check fails and internet access is available, open PowerShell in the installation directory and run:
+**Dependency check failing after install (and you have internet access)?** Open PowerShell in the installation directory and run the repair command:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -RepairDeps
 ```
 
-## License
+## 📄 License
 
 See [LICENSE](LICENSE).

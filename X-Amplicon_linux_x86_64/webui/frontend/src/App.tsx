@@ -69,6 +69,11 @@ export default function App() {
     void refreshDashboard();
   }, [refreshDashboard]);
 
+  useEffect(() => {
+    document.documentElement.lang = locale === 'Chinese' ? 'zh-CN' : 'en';
+    document.body.dataset.locale = locale;
+  }, [locale]);
+
   async function handleLocaleChange(nextLocale: Locale) {
     setLocale(nextLocale);
     if (!settings) {

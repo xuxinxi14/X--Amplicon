@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from typing import Literal
 
 from pydantic import Field
 
 from webui.backend.models.common import WebUIBaseModel
-
-
-def default_usearch_path() -> str:
-    return r"bin\windows\usearch.exe" if os.name == "nt" else "bin/usearch"
-
-
-def default_vsearch_path() -> str:
-    return r"bin\windows\vsearch.exe" if os.name == "nt" else "bin/vsearch"
 
 
 class WebUISettings(WebUIBaseModel):
@@ -28,9 +19,9 @@ class WebUISettings(WebUIBaseModel):
     default_seq_dir: str = "seq"
     default_group_col: str = "Group"
     default_sample_id_col: str = "SampleID"
-    usearch_path: str = Field(default_factory=default_usearch_path)
-    vsearch_path: str = Field(default_factory=default_vsearch_path)
-    default_plot_format: Literal["html", "png", "pdf", "svg", "all"] = "html"
+    usearch_path: str = r"bin\windows\usearch.exe"
+    vsearch_path: str = r"bin\windows\vsearch.exe"
+    default_plot_format: Literal["html", "png", "pdf", "svg", "all"] = "all"
     authorized_dirs: list[str] = Field(default_factory=list)
 
 

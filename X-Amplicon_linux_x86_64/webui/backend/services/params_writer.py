@@ -16,6 +16,7 @@ PIPELINE_PARAM_ORDER = (
     "output_root",
     "read1_suffix",
     "read2_suffix",
+    "merge_backend",
     "fastq_stripleft",
     "fastq_stripright",
     "fastq_maxee_rate",

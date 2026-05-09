@@ -6,9 +6,20 @@ interface PlotFrameProps {
   path: string | null | undefined;
   projectId?: string | null;
   messages: Messages;
+  formats?: Partial<Record<string, string>> | null;
 }
 
-export function PlotFrame({ title, path, projectId, messages }: PlotFrameProps) {
+function suffixOf(path: string): string {
+  const name = path.replace(/\\/g, '/').split('/').pop() || path;
+  const index = name.lastIndexOf('.');
+  return index >= 0 ? name.slice(index + 1).toLowerCase() : '';
+}
+
+function formatLabel(format: string): string {
+  return format.toUpperCase();
+}
+
+export function PlotFrame({ title, path, projectId, messages, formats }: PlotFrameProps) {
   if (!path) {
     return (
       <section className="plot-panel">
@@ -21,6 +32,8 @@ export function PlotFrame({ title, path, projectId, messages }: PlotFrameProps) 
 
   const viewUrl = api.fileViewUrl(path, projectId);
   const downloadUrl = api.fileDownloadUrl(path, projectId);
+  const suffix = suffixOf(path);
+  const formatEntries = Object.entries(formats || {}).filter((entry): entry is [string, string] => Boolean(entry[1]));
 
   return (
     <section className="plot-panel">
@@ -36,9 +49,20 @@ export function PlotFrame({ title, path, projectId, messages }: PlotFrameProps) 
           <a className="button-link" href={downloadUrl}>
             {messages.results.download}
           </a>
+          {formatEntries.map(([format, formatPath]) => (
+            <a className="button-link" href={api.fileDownloadUrl(formatPath, projectId)} key={`${format}-${formatPath}`}>
+              {formatLabel(format)}
+            </a>
+          ))}
         </div>
       </div>
-      <iframe className="plot-frame" title={title} src={viewUrl} />
+      {suffix === 'html' || suffix === 'htm' ? <iframe className="plot-frame" title={title} src={viewUrl} /> : null}
+      {suffix === 'png' || suffix === 'svg' ? <img className="plot-frame plot-image" src={viewUrl} alt={title} /> : null}
+      {suffix !== 'html' && suffix !== 'htm' && suffix !== 'png' && suffix !== 'svg' ? (
+        <div className="empty-state compact">
+          <p>{messages.results.staticPlotDownload}</p>
+        </div>
+      ) : null}
     </section>
   );
 }

@@ -1,4 +1,6 @@
-import { api } from '../api/client';
+import { useState } from 'react';
+
+import { api, formatApiError } from '../api/client';
 import type { DashboardData, ProjectRecord } from '../api/types';
 import type { Messages } from '../i18n';
 import type { PageId } from './pageTypes';
@@ -24,7 +26,15 @@ function formatDate(value: string | null | undefined): string {
   return date.toLocaleString();
 }
 
-function ProjectRow({ project, messages }: { project: ProjectRecord; messages: Messages }) {
+function ProjectRow({
+  project,
+  messages,
+  onDelete
+}: {
+  project: ProjectRecord;
+  messages: Messages;
+  onDelete: (project: ProjectRecord) => void;
+}) {
   return (
     <tr>
       <td>
@@ -34,12 +44,51 @@ function ProjectRow({ project, messages }: { project: ProjectRecord; messages: M
       <td>{project.project_dir}</td>
       <td>{project.output_root}</td>
       <td>{formatDate(project.updated_at)}</td>
+      <td>
+        <button type="button" onClick={() => onDelete(project)}>
+          {messages.dashboard.deleteHistory}
+        </button>
+      </td>
     </tr>
   );
 }
 
 export function Dashboard({ data, loading, error, messages, onNavigate, onRefresh }: DashboardProps) {
   const hasProjects = data.projects.length > 0;
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyBusy, setHistoryBusy] = useState(false);
+
+  async function deleteHistory(project: ProjectRecord) {
+    if (!window.confirm(messages.dashboard.deleteHistoryConfirm.replace('{name}', project.name))) {
+      return;
+    }
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      await api.deleteProject(project.id);
+      await onRefresh();
+    } catch (err) {
+      setHistoryError(formatApiError(err));
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
+
+  async function clearHistory() {
+    if (!window.confirm(messages.dashboard.clearHistoryConfirm)) {
+      return;
+    }
+    setHistoryBusy(true);
+    setHistoryError(null);
+    try {
+      await api.clearProjects();
+      await onRefresh();
+    } catch (err) {
+      setHistoryError(formatApiError(err));
+    } finally {
+      setHistoryBusy(false);
+    }
+  }
 
   return (
     <section className="page">
@@ -78,6 +127,7 @@ export function Dashboard({ data, loading, error, messages, onNavigate, onRefres
       </div>
 
       {error ? <div className="alert alert-error">{error}</div> : null}
+      {historyError ? <div className="alert alert-error">{historyError}</div> : null}
 
       <div className="section-grid two-columns">
         <section className="panel">
@@ -124,7 +174,12 @@ export function Dashboard({ data, loading, error, messages, onNavigate, onRefres
       <section className="panel">
         <div className="panel-header">
           <h2>{messages.dashboard.recentProjects}</h2>
-          {loading ? <span className="subtle-text">{messages.loading}</span> : null}
+          <div className="inline-actions">
+            {loading || historyBusy ? <span className="subtle-text">{messages.loading}</span> : null}
+            <button type="button" onClick={clearHistory} disabled={!hasProjects || historyBusy}>
+              {messages.dashboard.clearHistory}
+            </button>
+          </div>
         </div>
         {hasProjects ? (
           <div className="table-wrap">
@@ -135,11 +190,12 @@ export function Dashboard({ data, loading, error, messages, onNavigate, onRefres
                   <th>{messages.dashboard.projectDir}</th>
                   <th>{messages.dashboard.outputRoot}</th>
                   <th>{messages.dashboard.updatedAt}</th>
+                  <th>{messages.dashboard.actions}</th>
                 </tr>
               </thead>
               <tbody>
                 {data.projects.slice(0, 6).map((project) => (
-                  <ProjectRow key={project.id} project={project} messages={messages} />
+                  <ProjectRow key={project.id} project={project} messages={messages} onDelete={deleteHistory} />
                 ))}
               </tbody>
             </table>

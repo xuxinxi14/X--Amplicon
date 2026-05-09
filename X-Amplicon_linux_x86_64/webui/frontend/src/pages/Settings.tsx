@@ -24,7 +24,7 @@ function defaultSettings(locale: Locale): WebUISettings {
     default_sample_id_col: 'SampleID',
     usearch_path: 'bin\\windows\\usearch.exe',
     vsearch_path: 'bin\\windows\\vsearch.exe',
-    default_plot_format: 'html',
+    default_plot_format: 'all',
     authorized_dirs: []
   };
 }
@@ -119,6 +119,31 @@ export function Settings({ settings, messages, onSettingsSaved }: SettingsProps)
     } finally {
       setSavingLlm(false);
     }
+  }
+
+  async function pickPath(kind: 'file' | 'directory', title: string, onPicked: (path: string) => void) {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await api.pickPath(kind, title);
+      if (result.path) {
+        onPicked(result.path);
+      }
+    } catch (err) {
+      setError(formatApiError(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function addAuthorizedDir(path: string) {
+    setAuthorizedText((current) => {
+      const entries = current
+        .split(/\r?\n/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+      return entries.includes(path) ? current : [...entries, path].join('\n');
+    });
   }
 
   const modelOptions = llmConfig?.models || [];
@@ -241,21 +266,45 @@ export function Settings({ settings, messages, onSettingsSaved }: SettingsProps)
           <h2>{messages.settings.defaults}</h2>
           <label className="field">
             <span>{messages.settings.outputRoot}</span>
-            <input
-              value={form.default_output_root}
-              onChange={(event) => update('default_output_root', event.target.value)}
-            />
+            <div className="inline-input">
+              <input
+                value={form.default_output_root}
+                onChange={(event) => update('default_output_root', event.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => void pickPath('directory', messages.settings.pickOutputRoot, (path) => update('default_output_root', path))}
+              >
+                {messages.settings.pickFolder}
+              </button>
+            </div>
           </label>
           <label className="field">
             <span>{messages.settings.metadataPath}</span>
-            <input
-              value={form.default_metadata_path}
-              onChange={(event) => update('default_metadata_path', event.target.value)}
-            />
+            <div className="inline-input">
+              <input
+                value={form.default_metadata_path}
+                onChange={(event) => update('default_metadata_path', event.target.value)}
+              />
+              <button
+                type="button"
+                onClick={() => void pickPath('file', messages.settings.pickMetadata, (path) => update('default_metadata_path', path))}
+              >
+                {messages.settings.pickFile}
+              </button>
+            </div>
           </label>
           <label className="field">
             <span>{messages.settings.seqDir}</span>
-            <input value={form.default_seq_dir} onChange={(event) => update('default_seq_dir', event.target.value)} />
+            <div className="inline-input">
+              <input value={form.default_seq_dir} onChange={(event) => update('default_seq_dir', event.target.value)} />
+              <button
+                type="button"
+                onClick={() => void pickPath('directory', messages.settings.pickSeqDir, (path) => update('default_seq_dir', path))}
+              >
+                {messages.settings.pickFolder}
+              </button>
+            </div>
           </label>
           <label className="field">
             <span>{messages.settings.sampleIdCol}</span>
@@ -292,6 +341,15 @@ export function Settings({ settings, messages, onSettingsSaved }: SettingsProps)
             <textarea value={authorizedText} onChange={(event) => setAuthorizedText(event.target.value)} rows={5} />
             <small>{messages.settings.authorizedDirsHelp}</small>
           </label>
+          <div className="inline-actions">
+            <button
+              type="button"
+              onClick={() => void pickPath('directory', messages.settings.pickAuthorizedDir, addAuthorizedDir)}
+              disabled={saving}
+            >
+              {messages.settings.addAuthorizedDir}
+            </button>
+          </div>
         </section>
       </div>
     </section>

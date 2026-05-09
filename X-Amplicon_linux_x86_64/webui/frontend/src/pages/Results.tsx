@@ -68,7 +68,7 @@ function findFigure(figures: ResultFigure[], keywords: string[]): ResultFigure |
 }
 
 function findFigurePath(figures: ResultFigure[], fragment: string): ResultFigure | null {
-  const lowered = fragment.toLowerCase();
+  const lowered = fragment.toLowerCase().replace(/\.(html?|png|svg|pdf)$/, '');
   return figures.find((figure) => normalizePath(figure.path).includes(lowered)) || null;
 }
 
@@ -124,7 +124,9 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
     [messages.results.currentWorkspace, projects]
   );
 
-  const [selectedProjectId, setSelectedProjectId] = useState(projectOptions[0]?.id || 'current');
+  const defaultProjectId = projectOptions.find((option) => option.realProject)?.id || 'current';
+  const [selectedProjectId, setSelectedProjectId] = useState(defaultProjectId);
+  const [projectSelectionTouched, setProjectSelectionTouched] = useState(false);
   const [activeTab, setActiveTab] = useState<ResultTab>('summary');
   const [resultIndex, setResultIndex] = useState<ResultIndex | null>(null);
   const [summaryText, setSummaryText] = useState('');
@@ -141,6 +143,7 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
   const [fileLoading, setFileLoading] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resultWarnings, setResultWarnings] = useState<string[]>([]);
   const [reportJob, setReportJob] = useState<JobRecord | null>(null);
 
   const selectedOption = projectOptions.find((item) => item.id === selectedProjectId) || projectOptions[0];
@@ -153,6 +156,7 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
     setLoading(true);
     setError(null);
     setNotice(null);
+    setResultWarnings([]);
     setSummaryText('');
     setProvenanceText('');
     setPreviewText('');
@@ -165,16 +169,18 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
         try {
           const summary = await api.readFile(index.summary_path, projectIdForFiles);
           setSummaryText(summary.text);
-        } catch {
+        } catch (err) {
           setSummaryText('');
+          setResultWarnings((current) => [...current, `${messages.results.summaryReadFailed}: ${formatApiError(err)}`]);
         }
       }
       if (index.provenance_markdown) {
         try {
           const provenance = await api.readFile(index.provenance_markdown, projectIdForFiles);
           setProvenanceText(provenance.text);
-        } catch {
+        } catch (err) {
           setProvenanceText('');
+          setResultWarnings((current) => [...current, `${messages.results.provenanceReadFailed}: ${formatApiError(err)}`]);
         }
       }
     } catch (err) {
@@ -182,7 +188,7 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
     } finally {
       setLoading(false);
     }
-  }, [projectIdForFiles, selectedOption]);
+  }, [messages.results.provenanceReadFailed, messages.results.summaryReadFailed, projectIdForFiles, selectedOption]);
 
   const loadFiles = useCallback(
     async (path = filesPath) => {
@@ -207,9 +213,13 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
 
   useEffect(() => {
     if (!projectOptions.find((item) => item.id === selectedProjectId)) {
-      setSelectedProjectId(projectOptions[0]?.id || 'current');
+      setSelectedProjectId(defaultProjectId);
+      return;
     }
-  }, [projectOptions, selectedProjectId]);
+    if (!projectSelectionTouched && selectedProjectId === 'current' && defaultProjectId !== 'current') {
+      setSelectedProjectId(defaultProjectId);
+    }
+  }, [defaultProjectId, projectOptions, projectSelectionTouched, selectedProjectId]);
 
   useEffect(() => {
     void loadResults();
@@ -233,12 +243,14 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
   const selectedComparison = resultIndex?.differential.find((item) => item.comparison === comparison) || null;
 
   function setSelectedProject(nextProjectId: string) {
+    setProjectSelectionTouched(true);
     setSelectedProjectId(nextProjectId);
     setResultIndex(null);
     setSummaryText('');
     setProvenanceText('');
     setFileEntries([]);
     setPreviewText('');
+    setResultWarnings([]);
   }
 
   async function startReport() {
@@ -387,9 +399,9 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
             </select>
           </label>
         </div>
-        <PlotFrame title={`${messages.results.boxplot} - ${alphaMetric}`} path={boxplot?.path} projectId={projectIdForFiles} messages={messages} />
-        <PlotFrame title={`${messages.results.barplot} - ${alphaMetric}`} path={barplot?.path} projectId={projectIdForFiles} messages={messages} />
-        <PlotFrame title={messages.results.rarefaction} path={rare?.path} projectId={projectIdForFiles} messages={messages} />
+        <PlotFrame title={`${messages.results.boxplot} - ${alphaMetric}`} path={boxplot?.path} projectId={projectIdForFiles} messages={messages} formats={boxplot?.formats} />
+        <PlotFrame title={`${messages.results.barplot} - ${alphaMetric}`} path={barplot?.path} projectId={projectIdForFiles} messages={messages} formats={barplot?.formats} />
+        <PlotFrame title={messages.results.rarefaction} path={rare?.path} projectId={projectIdForFiles} messages={messages} formats={rare?.formats} />
         <ResultTable path={resultIndex?.files.alpha_diversity} projectId={projectIdForFiles} messages={messages} />
       </section>
     );
@@ -412,9 +424,9 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
             </select>
           </label>
         </div>
-        <PlotFrame title={`PCoA - ${betaMetric}`} path={pcoa?.path} projectId={projectIdForFiles} messages={messages} />
-        <PlotFrame title={`CPCoA - ${betaMetric}`} path={cpcoa?.path} projectId={projectIdForFiles} messages={messages} />
-        <PlotFrame title={`${messages.results.heatmap} - ${betaMetric}`} path={heatmap?.path} projectId={projectIdForFiles} messages={messages} />
+        <PlotFrame title={`PCoA - ${betaMetric}`} path={pcoa?.path} projectId={projectIdForFiles} messages={messages} formats={pcoa?.formats} />
+        <PlotFrame title={`CPCoA - ${betaMetric}`} path={cpcoa?.path} projectId={projectIdForFiles} messages={messages} formats={cpcoa?.formats} />
+        <PlotFrame title={`${messages.results.heatmap} - ${betaMetric}`} path={heatmap?.path} projectId={projectIdForFiles} messages={messages} formats={heatmap?.formats} />
         <section className="soft-panel">
           <h3>{messages.results.groupTest}</h3>
           <ResultTable path={stats} projectId={projectIdForFiles} messages={messages} />
@@ -441,8 +453,8 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
             </select>
           </label>
         </div>
-        <PlotFrame title={`${messages.results.stackedBar} - ${taxonomyLevel}`} path={stacked?.path} projectId={projectIdForFiles} messages={messages} />
-        <PlotFrame title={`${messages.results.heatmap} - ${taxonomyLevel}`} path={heatmap?.path} projectId={projectIdForFiles} messages={messages} />
+        <PlotFrame title={`${messages.results.stackedBar} - ${taxonomyLevel}`} path={stacked?.path} projectId={projectIdForFiles} messages={messages} formats={stacked?.formats} />
+        <PlotFrame title={`${messages.results.heatmap} - ${taxonomyLevel}`} path={heatmap?.path} projectId={projectIdForFiles} messages={messages} formats={heatmap?.formats} />
         <ResultTable path={summary} projectId={projectIdForFiles} messages={messages} />
       </section>
     );
@@ -469,8 +481,8 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
               <div><span>{messages.results.significantFeatures}</span><strong>{String(item.significant_features ?? 0)}</strong></div>
             </div>
             {item.significant_features === 0 ? <div className="alert alert-success">{messages.results.noSignificant}</div> : null}
-            <PlotFrame title={`${messages.results.volcano} - ${item.comparison}`} path={item.volcano} projectId={projectIdForFiles} messages={messages} />
-            <PlotFrame title={`${messages.results.heatmap} - ${item.comparison}`} path={item.heatmap} projectId={projectIdForFiles} messages={messages} />
+            <PlotFrame title={`${messages.results.volcano} - ${item.comparison}`} path={item.volcano} projectId={projectIdForFiles} messages={messages} formats={item.volcano_formats} />
+            <PlotFrame title={`${messages.results.heatmap} - ${item.comparison}`} path={item.heatmap} projectId={projectIdForFiles} messages={messages} formats={item.heatmap_formats} />
             <section className="soft-panel">
               <h3>{messages.results.resultTable}</h3>
               <ResultTable path={item.result_path} projectId={projectIdForFiles} messages={messages} maxRows={15} />
@@ -615,6 +627,7 @@ export function Results({ projects, messages, onNavigate }: ResultsProps) {
 
       {notice ? <div className="alert alert-success">{notice}</div> : null}
       {error ? <div className="alert alert-error">{error}</div> : null}
+      {resultWarnings.map((warning) => <div className="alert alert-warning" key={warning}>{warning}</div>)}
 
       <div className="tabs">
         {tabs.map((tab) => (

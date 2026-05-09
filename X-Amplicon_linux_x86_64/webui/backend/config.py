@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from pathlib import Path
-import os
 import sys
 
 APP_NAME = "X-Amplicon Web UI"
@@ -52,22 +51,13 @@ def get_default_python_executable() -> str:
     """Return the preferred Python executable for Web UI subprocesses."""
 
     root = get_project_root()
-    if os.name == "nt":
-        bundled_python = root / ".tools" / "python-3.13.13-amd64" / "python.exe"
-        if bundled_python.is_file():
-            return str(bundled_python)
+    bundled_python = root / ".tools" / "python-3.13.13-amd64" / "python.exe"
+    if bundled_python.is_file():
+        return str(bundled_python)
 
-        venv_python = root / ".venv" / "Scripts" / "python.exe"
-        if venv_python.is_file():
-            return str(venv_python)
-
-    venv_python = root / ".venv" / "bin" / "python"
+    venv_python = root / ".venv" / "Scripts" / "python.exe"
     if venv_python.is_file():
         return str(venv_python)
-
-    for bundled_python in sorted((root / ".tools").glob("python*/bin/python")):
-        if bundled_python.is_file():
-            return str(bundled_python)
 
     return sys.executable or "python"
 

@@ -15,8 +15,6 @@ DEFAULT_VSEARCH_WINDOWS_PATH = os.path.join(
 DEFAULT_USEARCH_WINDOWS_PATH = os.path.join(
     PROJECT_ROOT, "bin", "windows", "usearch.exe"
 )
-DEFAULT_VSEARCH_POSIX_PATH = os.path.join(PROJECT_ROOT, "bin", "vsearch")
-DEFAULT_USEARCH_POSIX_PATH = os.path.join(PROJECT_ROOT, "bin", "usearch")
 
 try:
     import yaml
@@ -92,14 +90,6 @@ def resolve_executable(
 
     if os.name == "nt" and windows_default_path:
         candidates.append(windows_default_path)
-    elif os.name != "nt":
-        normalized_name = executable_name.lower()
-        if normalized_name == "usearch":
-            candidates.append(DEFAULT_USEARCH_POSIX_PATH)
-            candidates.append(os.path.join(PROJECT_ROOT, "bin", "linux", "usearch"))
-        elif normalized_name == "vsearch":
-            candidates.append(DEFAULT_VSEARCH_POSIX_PATH)
-            candidates.append(os.path.join(PROJECT_ROOT, "bin", "linux", "vsearch"))
 
     for candidate in candidates:
         if candidate and os.path.isfile(candidate):

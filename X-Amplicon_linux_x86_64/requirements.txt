@@ -7,5 +7,6 @@ click
 biopython
 pydantic>=2.0
 plotly>=5.15
+kaleido
 rich
 litellm

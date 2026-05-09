@@ -871,6 +871,12 @@ _TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "description": "File suffix for reverse reads. Defaults to '_2.fq.gz'.",
                     "default": "_2.fq.gz",
                 },
+                "merge_backend": {
+                    "type": "string",
+                    "enum": ["vsearch", "python"],
+                    "description": "Backend for paired-end read merging. Defaults to 'vsearch'.",
+                    "default": "vsearch",
+                },
                 "usearch_path": {
                     "type": "string",
                     "description": "Explicit path to the USEARCH executable (optional).",

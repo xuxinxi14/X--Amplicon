@@ -15,6 +15,7 @@ class ResultFigure(WebUIBaseModel):
     label: str
     path: str
     category: str
+    formats: dict[str, str] = Field(default_factory=dict)
 
 
 class DifferentialComparisonResult(WebUIBaseModel):
@@ -27,6 +28,8 @@ class DifferentialComparisonResult(WebUIBaseModel):
     significant_features: int | None = None
     volcano: str | None = None
     heatmap: str | None = None
+    volcano_formats: dict[str, str] = Field(default_factory=dict)
+    heatmap_formats: dict[str, str] = Field(default_factory=dict)
 
 
 class ResultIndex(WebUIBaseModel):
