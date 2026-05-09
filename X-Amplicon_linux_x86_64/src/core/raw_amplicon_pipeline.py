@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import gzip
 import json
 import os
 import shutil
@@ -707,6 +708,16 @@ def _run_vsearch_mergepairs(
     }
 
 
+def _prepare_vsearch_fastq_input(source_path: str, output_dir: str, label: str) -> tuple[str, str | None]:
+    if not str(source_path).lower().endswith(".gz"):
+        return source_path, None
+
+    temp_path = os.path.join(output_dir, f"{label}.vsearch_input.fq.tmp")
+    with gzip.open(source_path, "rb") as source, open(temp_path, "wb") as destination:
+        shutil.copyfileobj(source, destination)
+    return temp_path, temp_path
+
+
 def _execute_pipeline_step(
     context: PipelineContext,
     name: str,
@@ -956,22 +967,47 @@ def _step_merge_pairs(context: PipelineContext) -> dict[str, Any]:
             )
             merge_summary = {"backend": MERGE_BACKEND_PYTHON, **merge_summary}
         else:
-            merge_summary = _run_vsearch_mergepairs(
-                read1_path=read1_path,
-                read2_path=read2_path,
-                output_path=merged_fastq_path,
-                vsearch_path=(
-                    None
-                    if effective_params.get("vsearch_path") is None
-                    else str(effective_params["vsearch_path"])
-                ),
-                threads=int(effective_params.get("threads", 1)),
-                command_timeout=(
-                    None
-                    if effective_params.get("command_timeout") is None
-                    else float(effective_params["command_timeout"])
-                ),
+            temp_inputs: list[str] = []
+            vsearch_read1_path, temp_read1_path = _prepare_vsearch_fastq_input(
+                read1_path,
+                context.work_dirs["merged"],
+                f"{sample_id}.R1",
             )
+            vsearch_read2_path, temp_read2_path = _prepare_vsearch_fastq_input(
+                read2_path,
+                context.work_dirs["merged"],
+                f"{sample_id}.R2",
+            )
+            temp_inputs.extend(
+                path for path in (temp_read1_path, temp_read2_path) if path is not None
+            )
+            try:
+                merge_summary = _run_vsearch_mergepairs(
+                    read1_path=vsearch_read1_path,
+                    read2_path=vsearch_read2_path,
+                    output_path=merged_fastq_path,
+                    vsearch_path=(
+                        None
+                        if effective_params.get("vsearch_path") is None
+                        else str(effective_params["vsearch_path"])
+                    ),
+                    threads=int(effective_params.get("threads", 1)),
+                    command_timeout=(
+                        None
+                        if effective_params.get("command_timeout") is None
+                        else float(effective_params["command_timeout"])
+                    ),
+                )
+            finally:
+                for temp_input in temp_inputs:
+                    if os.path.exists(temp_input):
+                        os.remove(temp_input)
+            if temp_inputs:
+                merge_summary["command_read1_path"] = merge_summary["read1_path"]
+                merge_summary["command_read2_path"] = merge_summary["read2_path"]
+                merge_summary["read1_path"] = read1_path
+                merge_summary["read2_path"] = read2_path
+                merge_summary["decompressed_inputs"] = True
         _prefix_fastq_headers(merged_fastq_path, sample_id)
         merge_summaries.append({"sample_id": sample_id, **merge_summary})
         merged_fastq_paths.append(merged_fastq_path)

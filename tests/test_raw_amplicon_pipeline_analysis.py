@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import json
 import unittest
 from pathlib import Path
@@ -283,8 +284,10 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
             merged_dir.mkdir()
             read1_path = temp_path / "S1_1.fq.gz"
             read2_path = temp_path / "S1_2.fq.gz"
-            read1_path.write_bytes(b"")
-            read2_path.write_bytes(b"")
+            with gzip.open(read1_path, "wt", encoding="utf-8") as handle:
+                handle.write("@SEQ1/1\nACGT\n+\nIIII\n")
+            with gzip.open(read2_path, "wt", encoding="utf-8") as handle:
+                handle.write("@SEQ1/2\nACGT\n+\nIIII\n")
             calls: list[tuple[list[str], float | None]] = []
 
             def fake_run_command(command: list[str], timeout: float | None = None):
@@ -318,9 +321,13 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
             command, timeout = calls[0]
             self.assertEqual(timeout, 12)
             self.assertIn("--fastq_mergepairs", command)
-            self.assertIn(str(read1_path), command)
+            command_read1 = command[command.index("--fastq_mergepairs") + 1]
+            command_read2 = command[command.index("--reverse") + 1]
+            self.assertNotEqual(str(read1_path), command_read1)
+            self.assertNotEqual(str(read2_path), command_read2)
+            self.assertFalse(Path(command_read1).exists())
+            self.assertFalse(Path(command_read2).exists())
             self.assertIn("--reverse", command)
-            self.assertIn(str(read2_path), command)
             self.assertIn("--threads", command)
             self.assertIn("4", command)
             self.assertIn("--fastq_minovlen", command)
@@ -334,6 +341,8 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
                 context.results["merge_summaries"][0]["backend"],
                 MERGE_BACKEND_VSEARCH,
             )
+            self.assertTrue(context.results["merge_summaries"][0]["decompressed_inputs"])
+            self.assertEqual(context.results["merge_summaries"][0]["read1_path"], str(read1_path))
         finally:
             rmtree(temp_path, ignore_errors=True)
 
