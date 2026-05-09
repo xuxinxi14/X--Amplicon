@@ -14,7 +14,7 @@ from click.testing import CliRunner
 from agent.tools import get_tool_schemas
 from process import cli
 from src.core.viz_common import validate_output_format
-from src.core.viz_beta_diversity import plot_beta_cpcoa, plot_beta_pcoa
+from src.core.viz_beta_diversity import _build_beta_heatmap, plot_beta_cpcoa, plot_beta_pcoa
 from src.core.viz_pipeline import run_visualization_suite
 
 
@@ -196,6 +196,34 @@ class VisualizationToolTests(unittest.TestCase):
             self.assertIn("#619CFF", html)
         finally:
             rmtree(temp_path, ignore_errors=True)
+
+    def test_beta_heatmap_legend_and_colorbar_do_not_share_top_right_corner(self) -> None:
+        sample_ids = ["WT1", "WT2", "KO1", "OE1"]
+        distances = pd.DataFrame(
+            [
+                [0.0, 0.1, 0.4, 0.3],
+                [0.1, 0.0, 0.5, 0.2],
+                [0.4, 0.5, 0.0, 0.35],
+                [0.3, 0.2, 0.35, 0.0],
+            ],
+            index=sample_ids,
+            columns=sample_ids,
+        )
+        metadata = pd.DataFrame({"SampleID": sample_ids, "Group": ["WT", "WT", "KO", "OE"]})
+
+        fig = _build_beta_heatmap(
+            distances,
+            metadata,
+            metric="braycurtis",
+            cluster_samples=False,
+            permanova={"statistic": 1.0, "p_value": 0.1},
+            anosim={"statistic": 0.2, "p_value": 0.1},
+        )
+
+        self.assertEqual(fig.data[1].colorbar.title.side, "right")
+        self.assertLessEqual(fig.data[1].colorbar.y + fig.data[1].colorbar.len / 2, 0.8)
+        self.assertGreaterEqual(fig.layout.legend.x, 1.05)
+        self.assertGreaterEqual(fig.layout.margin.r, 160)
 
     def test_cpcoa_keeps_sample_level_coordinates_within_groups(self) -> None:
         temp_path = Path("tests") / f"tmp_cpcoa_{uuid4().hex}"

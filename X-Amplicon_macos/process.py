@@ -45,7 +45,10 @@ from src.core.raw_amplicon_pipeline import (
     FEATURE_METHOD_ASV,
     FEATURE_METHOD_USEARCH_OTU,
     FEATURE_METHOD_VSEARCH_OTU,
+    MERGE_BACKEND_PYTHON,
+    MERGE_BACKEND_VSEARCH,
     VALID_FEATURE_METHODS,
+    VALID_MERGE_BACKENDS,
     run_raw_amplicon_pipeline,
 )
 from src.core.taxonomy_summary import (
@@ -129,6 +132,7 @@ PIPELINE_PARAM_ORDER = (
     "output_root",
     "read1_suffix",
     "read2_suffix",
+    "merge_backend",
     "fastq_stripleft",
     "fastq_stripright",
     "fastq_maxee_rate",
@@ -352,6 +356,11 @@ def _load_pipeline_params(params_path: str) -> dict[str, object]:
         "output_root": _get_optional_config_value(config, "output_root", "work"),
         "read1_suffix": _get_optional_config_value(config, "read1_suffix", "_1.fq.gz"),
         "read2_suffix": _get_optional_config_value(config, "read2_suffix", "_2.fq.gz"),
+        "merge_backend": _get_optional_config_value(
+            config,
+            "merge_backend",
+            MERGE_BACKEND_VSEARCH,
+        ),
         "fastq_stripleft": _require_int_config_value(config, "fastq_stripleft"),
         "fastq_stripright": _require_int_config_value(config, "fastq_stripright"),
         "fastq_maxee_rate": _require_float_config_value(config, "fastq_maxee_rate"),
@@ -508,6 +517,9 @@ def _build_pipeline_effective_params(
         "output_root": os.path.abspath(str(pipeline_params["output_root"])),
         "read1_suffix": str(pipeline_params["read1_suffix"]),
         "read2_suffix": str(pipeline_params["read2_suffix"]),
+        "merge_backend": str(
+            pipeline_params.get("merge_backend", MERGE_BACKEND_VSEARCH)
+        ).strip().lower(),
         "fastq_stripleft": pipeline_params["fastq_stripleft"],
         "fastq_stripright": pipeline_params["fastq_stripright"],
         "fastq_maxee_rate": pipeline_params["fastq_maxee_rate"],
@@ -600,6 +612,9 @@ def inspect_pipeline_params_dict(
                 "feature_method must be one of: "
                 f"{', '.join(sorted(VALID_FEATURE_METHODS))}."
             )
+        merge_backend = effective_params["merge_backend"]
+        if merge_backend not in VALID_MERGE_BACKENDS:
+            raise ValueError("merge_backend must be one of: vsearch, python.")
         chimera_mode = effective_params["chimera_mode"]
         if chimera_mode not in VALID_CHIMERA_MODES:
             raise ValueError("chimera_mode must be one of: ref, none.")
@@ -653,6 +668,7 @@ def inspect_pipeline_params_dict(
                 "passed",
                 "Core pipeline parameters are syntactically valid.",
                 feature_method=feature_method,
+                merge_backend=merge_backend,
                 otutab_method=otutab_method,
                 filter_route=filter_route,
                 threads=effective_params["threads"],
@@ -983,6 +999,7 @@ def _echo_pipeline_check_report(report: dict[str, object]) -> None:
     click.echo(f"[CLI] Sequence directory: {effective_params['seq_dir']}")
     click.echo(f"[CLI] Output root: {effective_params['output_root']}")
     click.echo(f"[CLI] Feature method: {effective_params['feature_method']}")
+    click.echo(f"[CLI] Merge backend: {effective_params['merge_backend']}")
     click.echo(f"[CLI] OTU table method: {effective_params['otutab_method']}")
     click.echo(f"[CLI] Annotation database: {effective_params['annotation_database']}")
     if effective_params.get("annotation_database_path"):
@@ -1519,6 +1536,16 @@ def check_pipeline_config(params_path: str) -> None:
     help="Suffix appended to each sample ID to locate read 2 files.",
 )
 @click.option(
+    "--merge-backend",
+    default=MERGE_BACKEND_VSEARCH,
+    show_default=True,
+    type=click.Choice(
+        [MERGE_BACKEND_VSEARCH, MERGE_BACKEND_PYTHON],
+        case_sensitive=False,
+    ),
+    help="Backend used to merge paired-end FASTQ reads.",
+)
+@click.option(
     "--fastq-stripleft",
     required=True,
     type=click.IntRange(min=0),
@@ -1659,6 +1686,7 @@ def run_pipeline(
     output_root: str,
     read1_suffix: str,
     read2_suffix: str,
+    merge_backend: str,
     fastq_stripleft: int,
     fastq_stripright: int,
     fastq_maxee_rate: float,
@@ -1688,6 +1716,7 @@ def run_pipeline(
         click.echo(f"[CLI] Sequence directory: {seq_dir}")
         click.echo(f"[CLI] Output root: {output_root}")
         click.echo(f"[CLI] Feature method: {feature_method}")
+        click.echo(f"[CLI] Merge backend: {merge_backend}")
         click.echo(f"[CLI] OTU table method: {otutab_method}")
         click.echo(f"[CLI] Annotation database: {annotation_database}")
         click.echo(f"[CLI] Filter route: {filter_route}")
@@ -1711,6 +1740,7 @@ def run_pipeline(
             annotation_database=annotation_database,
             sintax_cutoff=sintax_cutoff,
             filter_route=filter_route,
+            merge_backend=merge_backend,
             beta_tree_path=beta_tree_path,
             rarefaction_depth=rarefaction_depth,
             rarefaction_seed=rarefaction_seed,
@@ -1785,6 +1815,7 @@ def run_pipeline_config(params_path: str, check_only: bool, dry_run: bool) -> No
         click.echo(f"[CLI] Sequence directory: {pipeline_params['seq_dir']}")
         click.echo(f"[CLI] Output root: {pipeline_params['output_root']}")
         click.echo(f"[CLI] Feature method: {pipeline_params['feature_method']}")
+        click.echo(f"[CLI] Merge backend: {pipeline_params['merge_backend']}")
         click.echo(f"[CLI] OTU table method: {pipeline_params['otutab_method']}")
         click.echo(
             f"[CLI] Annotation database: {pipeline_params['annotation_database']}"

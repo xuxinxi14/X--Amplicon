@@ -33,6 +33,7 @@ class ProjectUpdate(WebUIBaseModel):
     read2_suffix: str | None = None
     params_path: str | None = None
     last_job_id: str | None = None
+    last_preflight_job_id: str | None = None
 
 
 class ProjectRecord(WebUIBaseModel):
@@ -51,6 +52,7 @@ class ProjectRecord(WebUIBaseModel):
     read2_suffix: str = "_2.fq.gz"
     params_path: str | None = None
     last_job_id: str | None = None
+    last_preflight_job_id: str | None = None
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
 
@@ -122,6 +124,7 @@ class PipelineParamsDraft(WebUIBaseModel):
     output_root: str = "work"
     read1_suffix: str = "_1.fq.gz"
     read2_suffix: str = "_2.fq.gz"
+    merge_backend: Literal["vsearch", "python"] = "vsearch"
     fastq_stripleft: int = 29
     fastq_stripright: int = 18
     fastq_maxee_rate: float = 0.01

@@ -1,17 +1,10 @@
-import type { JobRecord, StatusKind } from '../api/types';
+import type { JobProgressResponse, JobRecord } from '../api/types';
 import type { Messages } from '../i18n';
 import { StatusBadge } from './StatusBadge';
 
-type ProgressStatus = StatusKind | 'pending' | 'unknown';
-
-interface ProgressStep {
-  key: string;
-  label: string;
-  status: ProgressStatus;
-}
-
 interface JobProgressProps {
   job: JobRecord | null;
+  progress: JobProgressResponse | null;
   messages: Messages;
 }
 
@@ -20,32 +13,19 @@ function statusText(status: string, messages: Messages): string {
   return labels[status] || status;
 }
 
-function normalizeJobStatus(status: string): StatusKind {
-  if (status === 'checking') {
-    return 'running';
-  }
-  if (status === 'queued' || status === 'running' || status === 'completed' || status === 'failed' || status === 'cancelled') {
-    return status;
-  }
-  return 'queued';
+function stepLabel(key: string, messages: Messages): string {
+  const labels = messages.runMonitor.progressSteps as Record<string, string>;
+  return labels[key] || key;
 }
 
-function pipelineStageStatus(job: JobRecord, index: number): ProgressStatus {
-  if (job.status === 'completed') {
-    return 'completed';
+function formatDuration(value: number | null): string {
+  if (value === null || Number.isNaN(value)) {
+    return '';
   }
-  if (job.status === 'failed') {
-    return index === 0 ? 'failed' : 'unknown';
-  }
-  if (job.status === 'cancelled') {
-    return index === 0 ? 'cancelled' : 'unknown';
-  }
-  return 'unknown';
+  return `${value.toFixed(value < 10 ? 1 : 0)}s`;
 }
 
-export function JobProgress({ job, messages }: JobProgressProps) {
-  const labels = messages.runMonitor.progressSteps;
-
+export function JobProgress({ job, progress, messages }: JobProgressProps) {
   if (!job) {
     return (
       <section className="panel">
@@ -57,59 +37,41 @@ export function JobProgress({ job, messages }: JobProgressProps) {
     );
   }
 
-  let steps: ProgressStep[];
-  if (job.job_type === 'preflight') {
-    steps = [
-      { key: 'preflight', label: labels.preflight, status: normalizeJobStatus(job.status) },
-      { key: 'inputCopy', label: labels.inputCopy, status: 'pending' },
-      { key: 'mergeReads', label: labels.mergeReads, status: 'pending' },
-      { key: 'qualityFilter', label: labels.qualityFilter, status: 'pending' },
-      { key: 'dereplication', label: labels.dereplication, status: 'pending' },
-      { key: 'featureGeneration', label: labels.featureGeneration, status: 'pending' },
-      { key: 'taxonomy', label: labels.taxonomy, status: 'pending' },
-      { key: 'rarefaction', label: labels.rarefaction, status: 'pending' },
-      { key: 'diversity', label: labels.diversity, status: 'pending' },
-      { key: 'visualization', label: labels.visualization, status: 'pending' },
-      { key: 'report', label: labels.report, status: 'pending' }
-    ];
-  } else {
-    const pipelineLabels = [
-      labels.inputCopy,
-      labels.mergeReads,
-      labels.qualityFilter,
-      labels.dereplication,
-      labels.featureGeneration,
-      labels.taxonomy,
-      labels.rarefaction,
-      labels.diversity,
-      labels.visualization,
-      labels.report
-    ];
-    steps = [
-      { key: 'preflight', label: labels.preflight, status: 'pending' },
-      ...pipelineLabels.map((label, index) => ({
-        key: `${index}-${label}`,
-        label,
-        status: pipelineStageStatus(job, index)
-      }))
-    ];
-  }
+  const steps = progress?.steps || [];
+  const completed = steps.filter((step) => step.status === 'completed').length;
+  const progressSummary = messages.runMonitor.progressSummary
+    .replace('{done}', String(completed))
+    .replace('{total}', String(steps.length));
 
   return (
     <section className="panel">
       <div className="panel-header">
         <h2>{messages.runMonitor.progress}</h2>
-        <StatusBadge status={job.status} label={statusText(job.status, messages)} />
+        <StatusBadge status={progress?.status || job.status} label={statusText(progress?.status || job.status, messages)} />
       </div>
       <p className="subtle-text">{messages.runMonitor.progressNote}</p>
+      {progress?.current_step ? <p className="subtle-text">{stepLabel(progress.current_step, messages)}</p> : null}
+      {progress?.failed_step ? <div className="alert alert-error">{stepLabel(progress.failed_step, messages)}: {progress.message}</div> : null}
+      {progress?.warnings?.map((warning, index) => (
+        <div className="alert alert-warning" key={`${index}-${warning}`}>{warning}</div>
+      ))}
+      {progress ? <p className="subtle-text">{progressSummary}</p> : <p className="subtle-text">{messages.loading}</p>}
       <ol className="progress-list">
-        {steps.map((step) => (
-          <li className={`progress-step progress-${step.status}`} key={step.key}>
-            <span className="progress-dot" />
-            <span>{step.label}</span>
-            <StatusBadge status={step.status} label={messages.runMonitor.statusLabels[step.status]} />
-          </li>
-        ))}
+        {steps.map((step) => {
+          const duration = formatDuration(step.duration_seconds);
+          return (
+            <li className={`progress-step progress-${step.status}`} key={`${step.source}-${step.key}`}>
+              <span className="progress-dot" />
+              <span className="progress-step-main">
+                <strong>{stepLabel(step.key, messages)}</strong>
+                {step.error ? <small className="error-text">{step.error}</small> : null}
+                {!step.error && step.message ? <small>{step.message}</small> : null}
+                {duration ? <small>{duration}</small> : null}
+              </span>
+              <StatusBadge status={step.status} label={statusText(step.status, messages)} />
+            </li>
+          );
+        })}
       </ol>
     </section>
   );

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { api, formatApiError } from '../api/client';
-import type { JobRecord, ProjectRecord } from '../api/types';
+import type { JobProgressResponse, JobRecord, ProjectRecord } from '../api/types';
 import { JobProgress } from '../components/JobProgress';
 import { LogViewer } from '../components/LogViewer';
 import { StatusBadge } from '../components/StatusBadge';
@@ -42,6 +42,7 @@ export function RunMonitor({ projects, messages, onNavigate }: RunMonitorProps) 
   const [jobs, setJobs] = useState<JobRecord[]>([]);
   const [selectedJobId, setSelectedJobId] = useState('');
   const [selectedJob, setSelectedJob] = useState<JobRecord | null>(null);
+  const [selectedProgress, setSelectedProgress] = useState<JobProgressResponse | null>(null);
   const [manualJobId, setManualJobId] = useState('');
   const [logText, setLogText] = useState('');
   const [loadingJobs, setLoadingJobs] = useState(false);
@@ -59,12 +60,18 @@ export function RunMonitor({ projects, messages, onNavigate }: RunMonitorProps) 
     async (jobId = selectedJobId) => {
       if (!jobId) {
         setSelectedJob(null);
+        setSelectedProgress(null);
         setLogText('');
         return;
       }
       try {
-        const [job, logs] = await Promise.all([api.getJob(jobId), api.getJobLogs(jobId, 100)]);
+        const [job, logs, progress] = await Promise.all([
+          api.getJob(jobId),
+          api.getJobLogs(jobId, 100),
+          api.getJobProgress(jobId)
+        ]);
         setSelectedJob(job);
+        setSelectedProgress(progress);
         setSelectedJobId(job.id);
         setManualJobId(job.id);
         setLogText(logs.text || '');
@@ -81,11 +88,18 @@ export function RunMonitor({ projects, messages, onNavigate }: RunMonitorProps) 
     try {
       const loadedJobs = await api.listJobs(80);
       setJobs(loadedJobs);
-      const nextSelectedId = selectedJobId || loadedJobs[0]?.id || '';
+      const selectedStillExists = Boolean(selectedJobId && loadedJobs.some((job) => job.id === selectedJobId));
+      const nextSelectedId = selectedStillExists ? selectedJobId : loadedJobs[0]?.id || '';
       if (nextSelectedId) {
         setSelectedJobId(nextSelectedId);
         setManualJobId(nextSelectedId);
         await refreshSelectedJob(nextSelectedId);
+      } else {
+        setSelectedJobId('');
+        setManualJobId('');
+        setSelectedJob(null);
+        setSelectedProgress(null);
+        setLogText('');
       }
     } catch (err) {
       setError(formatApiError(err));
@@ -150,6 +164,7 @@ export function RunMonitor({ projects, messages, onNavigate }: RunMonitorProps) 
       const cancelled = await api.cancelJob(selectedJob.id);
       setSelectedJob(cancelled);
       setNotice(messages.runMonitor.cancelRequested);
+      await refreshSelectedJob(cancelled.id);
       await loadJobs();
     } catch (err) {
       setError(formatApiError(err));
@@ -261,7 +276,7 @@ export function RunMonitor({ projects, messages, onNavigate }: RunMonitorProps) 
         </section>
       </div>
 
-      <JobProgress job={selectedJob} messages={messages} />
+      <JobProgress job={selectedJob} progress={selectedProgress} messages={messages} />
       <LogViewer
         job={selectedJob}
         logText={logText}

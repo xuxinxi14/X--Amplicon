@@ -43,3 +43,28 @@ class JobRecord(WebUIBaseModel):
     event_path: str
     message: str = ""
     error: str | None = None
+
+
+class JobProgressStep(WebUIBaseModel):
+    """One machine-readable progress step for Run Monitor."""
+
+    key: str
+    status: str = "pending"
+    message: str = ""
+    error: str | None = None
+    started_at: str | None = None
+    completed_at: str | None = None
+    duration_seconds: float | None = None
+    source: str = "job"
+
+
+class JobProgressResponse(WebUIBaseModel):
+    """Structured progress assembled from job events and run_summary.json."""
+
+    job_id: str
+    status: str
+    current_step: str | None = None
+    failed_step: str | None = None
+    message: str = ""
+    steps: list[JobProgressStep] = Field(default_factory=list)
+    warnings: list[str] = Field(default_factory=list)

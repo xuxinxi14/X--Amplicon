@@ -342,6 +342,89 @@ class ProcessCliTests(unittest.TestCase):
         finally:
             rmtree(temp_path, ignore_errors=True)
 
+    def test_check_pipeline_config_accepts_python_merge_backend(self) -> None:
+        temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            metadata_path = temp_path / "metadata.txt"
+            seq_dir = temp_path / "seq"
+            output_root = temp_path / "work"
+            seq_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata_path.write_text("SampleID\nS1\n", encoding="utf-8")
+            (seq_dir / "S1_1.fq.gz").write_bytes(b"")
+            (seq_dir / "S1_2.fq.gz").write_bytes(b"")
+            params_path = self._write_pipeline_params(
+                temp_path,
+                metadata_path=metadata_path,
+                seq_dir=seq_dir,
+                output_root=output_root,
+            )
+            params_path.write_text(
+                params_path.read_text(encoding="utf-8") + "  merge_backend: python\n",
+                encoding="utf-8",
+            )
+
+            with patch(
+                "process.importlib.import_module",
+                side_effect=self._mock_pipeline_dependency_imports(),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "check-pipeline-config",
+                        "--params",
+                        str(params_path),
+                    ],
+                )
+
+            self.assertEqual(result.exit_code, 0, msg=result.output)
+            self.assertIn("Pipeline config check: PASSED", result.output)
+            self.assertIn("Merge backend: python", result.output)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
+    def test_check_pipeline_config_rejects_invalid_merge_backend(self) -> None:
+        temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            metadata_path = temp_path / "metadata.txt"
+            seq_dir = temp_path / "seq"
+            output_root = temp_path / "work"
+            seq_dir.mkdir(parents=True, exist_ok=True)
+
+            metadata_path.write_text("SampleID\nS1\n", encoding="utf-8")
+            (seq_dir / "S1_1.fq.gz").write_bytes(b"")
+            (seq_dir / "S1_2.fq.gz").write_bytes(b"")
+            params_path = self._write_pipeline_params(
+                temp_path,
+                metadata_path=metadata_path,
+                seq_dir=seq_dir,
+                output_root=output_root,
+            )
+            params_path.write_text(
+                params_path.read_text(encoding="utf-8") + "  merge_backend: bad\n",
+                encoding="utf-8",
+            )
+
+            with patch(
+                "process.importlib.import_module",
+                side_effect=self._mock_pipeline_dependency_imports(),
+            ):
+                result = self.runner.invoke(
+                    cli,
+                    [
+                        "check-pipeline-config",
+                        "--params",
+                        str(params_path),
+                    ],
+                )
+
+            self.assertNotEqual(result.exit_code, 0)
+            self.assertIn("merge_backend must be one of: vsearch, python.", result.output)
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
     def test_check_pipeline_config_treats_none_tree_path_as_unset(self) -> None:
         temp_path = Path("tests") / f"tmp_cli_{uuid4().hex}"
         temp_path.mkdir(parents=True, exist_ok=True)

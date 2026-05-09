@@ -21,6 +21,9 @@ run_pipeline:
   # Read2 文件名后缀。程序会按 SampleID + 后缀匹配文件。
   read2_suffix: _2.fq.gz
 
+  # 双端合并后端，可选 vsearch 或 python。
+  merge_backend: vsearch
+
   # 左端剪切长度。
   fastq_stripleft: 29
 

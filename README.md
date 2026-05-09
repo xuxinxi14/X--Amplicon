@@ -3,21 +3,20 @@
 # 🧬 X-Amplicon
 **Author:** XinXi Xu
 
-X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with Linux x86_64 and macOS release workspaces for command-line and browser-based deployment. Drop in paired-end FASTQ files and a metadata table — X-Amplicon takes it from there, generating OTU/ASV tables, taxonomy annotation, alpha/beta diversity metrics, publication-ready visualizations, differential abundance plots, detailed reports, and full reproducibility records.
+X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analysis, with a Linux x86_64 server package for command-line and browser-based deployment. It turns paired-end FASTQ files and a metadata table into OTU/ASV tables, taxonomy annotation, alpha/beta diversity, publication-ready visualizations, differential abundance plots, reports, and reproducibility records.
 
 > 💡 **Recommended workflow:** Use the local browser Web UI. Your sequencing files never leave your computer, the wizard guides you step by step, and everything runs through the same deterministic Python workflow as the CLI. An LLM API key is entirely optional.
 
 ## ✨ Highlights
 
-- 🖥️ Local Windows Web UI built for wet-lab users — no command-line knowledge required.
-- 📦 One-click Windows installer with bundled Python, RDP 16S database, USEARCH/VSEARCH, and a prebuilt Web UI. Double-click and go.
-- 🐧 Linux x86_64 package with setup script, Web UI, CLI launchers, bundled small RDP database, and a server test workflow.
-- 🍎 macOS preview package with setup script, Web UI, and CLI launchers; `bin/usearch` automatically selects the correct USEARCH 12 binary for Intel or Apple Silicon.
-- 🤖 Guided Agent page that checks analysis readiness and walks you through each step.
-- 🔁 Deterministic `process.py` workflow for fully reproducible, automatable analysis runs.
-- 🚫🔑 No-LLM mode for local checks, visualization, reports, and most guidance — works great without any API key.
-- ⚙️ Optional LLM configuration right from the Web UI: API key, API base URL, and model selection all in one place.
-- 📊 Rich outputs: interactive Plotly charts, HTML/Markdown reports, `run_summary.json`, and provenance files so every run is traceable.
+- Local Windows Web UI for wet-lab users.
+- One-click Windows installer with bundled Python, RDP 16S database, USEARCH/VSEARCH, and prebuilt Web UI.
+- Linux x86_64 package with setup, Web UI, CLI launchers, bundled small RDP database, and server test workflow.
+- Guided Agent page for analysis readiness and step-by-step execution.
+- Deterministic `process.py` workflow for reproducibility and automation.
+- No-LLM mode for local checks, visualization, reports, and most guidance.
+- Optional LLM configuration from the Web UI: API key, API base URL, and model selection.
+- Outputs include Plotly charts, report HTML/Markdown, `run_summary.json`, and provenance files.
 
 <img width="1014" height="671" alt="c1a4c08be4838b85f1ee997ea8b795b" src="https://github.com/user-attachments/assets/557330d5-e8ef-41a5-9ad1-2983c4d17f87" />
 
@@ -90,9 +89,9 @@ powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -Port 8770
 powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -NoBrowser
 ```
 
-## 🐧 Quick Start: Linux x86_64 Server
+## Quick Start: Linux x86_64 Server
 
-The Linux release workspace targets Ubuntu 22.04 x86_64 and compatible x86_64 Linux servers:
+The Linux release workspace is intended for Ubuntu 22.04 x86_64 or compatible x86_64 Linux servers:
 
 ```bash
 cd /path/to/X-Amplicon_linux_x86_64
@@ -116,19 +115,19 @@ Run the full CLI workflow:
 ./run_process.sh generate-report --final-dir work/06_final
 ```
 
-Start the Linux Web UI from a terminal (no browser auto-open on servers):
+Start the Linux Web UI from a terminal, not by clicking the `.sh` file in Jupyter:
 
 ```bash
 ./start_webui.sh --no-browser
 ```
 
-On a remote SSH server, forward the port to your local machine:
+On an SSH server, forward the Web UI to your local browser:
 
 ```bash
 ssh -N -L 8765:127.0.0.1:8765 user@server
 ```
 
-Then open `http://127.0.0.1:8765` — it feels just like running it locally.
+Then open `http://127.0.0.1:8765`.
 
 For offline report browsing over SSH, serve the result directory through a local-only HTTP server:
 
@@ -137,45 +136,9 @@ For offline report browsing over SSH, serve the result directory through a local
 ssh -N -L 8899:127.0.0.1:8899 user@server
 ```
 
-Then open `http://127.0.0.1:8899/work/06_final/report/analysis_report.html` and browse your results without any file transfers.
+Then open `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`.
 
-## 🍎 Quick Start: macOS Preview
-
-The macOS release workspace supports both Intel and Apple Silicon Macs:
-
-```bash
-cd /path/to/X-Amplicon_macos
-chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
-  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
-./setup_macos.sh
-```
-
-`bin/usearch` is a thin wrapper that picks `usearch_osx_m_12.0-beta` on Apple Silicon and `usearch_osx_x86_12.0-beta` on Intel. The bundled VSEARCH binary is x86_64; Apple Silicon users may need Rosetta 2 if it cannot run natively.
-
-Check the macOS pipeline configuration:
-
-```bash
-./run_process.sh check-pipeline-config --params pipeline_params.macos.yaml
-```
-
-Run the full CLI workflow:
-
-```bash
-./run_process.sh run-pipeline-config --params pipeline_params.macos.yaml
-./run_process.sh visualization-suite --final-dir work/06_final --format html
-./run_process.sh generate-report --final-dir work/06_final
-```
-
-Start the macOS Web UI:
-
-```bash
-./start_webui.sh --no-browser
-```
-
-Then open `http://127.0.0.1:8765`. For full macOS-specific notes, see
-`X-Amplicon_macos/README_MACOS.md`.
-
-## 🖱️ Web UI Workflow
+## Web UI Workflow
 
 Follow these steps in order for a smooth analysis experience:
 
@@ -245,7 +208,10 @@ Main outputs:
 | Report | `work\06_final\report\analysis_report.html` |
 | Reproducibility records | `work\06_final\run_summary.json`, `provenance.json`, `provenance.md` |
 
-The CLI `run-pipeline-config` command writes the core analysis outputs first. Generate `plots/` and `report/` afterward by running `visualization-suite` and `generate-report`. Plots are neatly organized into type-specific subfolders rather than dumped into a single directory.
+The CLI `run-pipeline-config` command writes the core analysis outputs first.
+Generate `plots/` and `report/` afterward with `visualization-suite` and
+`generate-report`. Plot outputs are organized in subfolders instead of being
+placed together in one directory.
 
 ## 🤖 Optional LLM Agent
 <img width="1586" height="1137" alt="image" src="https://github.com/user-attachments/assets/1a27c243-d392-446b-a0f9-9f0490c43efd" />
@@ -302,7 +268,31 @@ python agent_cli.py --offline
 
 Useful slash commands include `/params`, `/status`, `/tools`, `/language`, `/report`, `/config`, and `/quit`. Type `/help` at any time for the full list.
 
-## 📦 Dependencies
+## Linux Packaging Options
+
+Linux does not use Windows `.exe` installers in the same way. The closest options are:
+
+| Option | When to use | Notes |
+| --- | --- | --- |
+| Portable `tar.gz` release | Recommended for servers and clusters | Ship the project directory, run `setup_linux.sh` on the target machine, and start with shell launchers. |
+| AppImage | Closest double-click desktop experience | Produces one Linux application file, but needs extra packaging work and testing per distribution. |
+| PyInstaller/Nuitka executable | CLI or launcher binary | Can produce an ELF executable, but Web UI assets, database files, and USEARCH/VSEARCH still need to be bundled or placed beside it. |
+| `.deb` package | Managed Ubuntu deployment | Best for internal IT deployment, but requires Debian packaging metadata and install scripts. |
+
+For this project, the most reliable Linux equivalent of the Windows installer is a portable directory archive:
+
+```bash
+cd ..
+tar --exclude='X-Amplicon_linux_x86_64/.venv' \
+    --exclude='X-Amplicon_linux_x86_64/work' \
+    --exclude='X-Amplicon_linux_x86_64/seq' \
+    --exclude='X-Amplicon_linux_x86_64/.env' \
+    -czf X-Amplicon_linux_x86_64.tar.gz X-Amplicon_linux_x86_64
+```
+
+Users unpack it, run `./setup_linux.sh`, then launch `./start_webui.sh --no-browser` or `./run_process.sh ...`. Build PyInstaller/AppImage artifacts only on a Linux system compatible with the target servers, and check redistribution terms for external tools such as USEARCH before bundling them.
+
+## Dependencies
 
 The Windows installer already includes everything needed for ordinary use. If you're building from source, install the following:
 

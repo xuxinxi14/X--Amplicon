@@ -13,8 +13,12 @@ from uuid import uuid4
 import pandas as pd
 
 from src.core.raw_amplicon_pipeline import (
+    MERGE_BACKEND_PYTHON,
+    MERGE_BACKEND_VSEARCH,
+    PipelineContext,
     _generate_analysis_outputs,
     _prefix_fastq_headers,
+    _step_merge_pairs,
     run_raw_amplicon_pipeline,
 )
 
@@ -271,6 +275,107 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
         finally:
             rmtree(temp_path, ignore_errors=True)
 
+    def test_step_merge_pairs_uses_vsearch_backend(self) -> None:
+        temp_path = Path("tests") / f"tmp_pipeline_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            merged_dir = temp_path / "01_merged"
+            merged_dir.mkdir()
+            read1_path = temp_path / "S1_1.fq.gz"
+            read2_path = temp_path / "S1_2.fq.gz"
+            read1_path.write_bytes(b"")
+            read2_path.write_bytes(b"")
+            calls: list[tuple[list[str], float | None]] = []
+
+            def fake_run_command(command: list[str], timeout: float | None = None):
+                calls.append((command, timeout))
+                output_path = Path(command[command.index("--fastqout") + 1])
+                output_path.write_text("@SEQ1\nACGT\n+\nIIII\n", encoding="utf-8")
+                return SimpleNamespace(command=command, returncode=0)
+
+            context = PipelineContext(
+                work_dirs={"merged": str(merged_dir)},
+                summary_path=str(temp_path / "run_summary.json"),
+                provenance_path=str(temp_path / "provenance.json"),
+                provenance_md_path=str(temp_path / "provenance.md"),
+                summary={
+                    "effective_params": {
+                        "vsearch_path": "mock-vsearch.exe",
+                        "threads": 4,
+                        "command_timeout": 12,
+                    }
+                },
+                resolved={"merge_backend": MERGE_BACKEND_VSEARCH},
+                results={"read_pairs": [("S1", str(read1_path), str(read2_path))]},
+            )
+
+            with (
+                patch("src.core.raw_amplicon_pipeline.resolve_executable", return_value="mock-vsearch.exe"),
+                patch("src.core.raw_amplicon_pipeline.run_command", side_effect=fake_run_command),
+            ):
+                result = _step_merge_pairs(context)
+
+            command, timeout = calls[0]
+            self.assertEqual(timeout, 12)
+            self.assertIn("--fastq_mergepairs", command)
+            self.assertIn(str(read1_path), command)
+            self.assertIn("--reverse", command)
+            self.assertIn(str(read2_path), command)
+            self.assertIn("--threads", command)
+            self.assertIn("4", command)
+            self.assertIn("--fastq_minovlen", command)
+            self.assertIn("--fastq_maxdiffs", command)
+            self.assertEqual(result["backend"], MERGE_BACKEND_VSEARCH)
+            self.assertEqual(
+                (merged_dir / "all.fq").read_text(encoding="utf-8"),
+                "@S1.SEQ1\nACGT\n+\nIIII\n",
+            )
+            self.assertEqual(
+                context.results["merge_summaries"][0]["backend"],
+                MERGE_BACKEND_VSEARCH,
+            )
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
+    def test_step_merge_pairs_keeps_python_fallback(self) -> None:
+        temp_path = Path("tests") / f"tmp_pipeline_{uuid4().hex}"
+        temp_path.mkdir(parents=True, exist_ok=True)
+        try:
+            merged_dir = temp_path / "01_merged"
+            merged_dir.mkdir()
+            read1_path = temp_path / "S1_1.fq.gz"
+            read2_path = temp_path / "S1_2.fq.gz"
+            read1_path.write_bytes(b"")
+            read2_path.write_bytes(b"")
+            context = PipelineContext(
+                work_dirs={"merged": str(merged_dir)},
+                summary_path=str(temp_path / "run_summary.json"),
+                provenance_path=str(temp_path / "provenance.json"),
+                provenance_md_path=str(temp_path / "provenance.md"),
+                summary={"effective_params": {"threads": 1}},
+                resolved={"merge_backend": MERGE_BACKEND_PYTHON},
+                results={"read_pairs": [("S1", str(read1_path), str(read2_path))]},
+            )
+
+            with (
+                patch(
+                    "src.core.raw_amplicon_pipeline._load_vendor_fastq_mergepairs",
+                    return_value=self._mock_mergepairs(),
+                ) as load_mergepairs,
+                patch("src.core.raw_amplicon_pipeline.resolve_executable") as resolve_executable,
+            ):
+                result = _step_merge_pairs(context)
+
+            load_mergepairs.assert_called_once()
+            resolve_executable.assert_not_called()
+            self.assertEqual(result["backend"], MERGE_BACKEND_PYTHON)
+            self.assertEqual(
+                context.results["merge_summaries"][0]["backend"],
+                MERGE_BACKEND_PYTHON,
+            )
+        finally:
+            rmtree(temp_path, ignore_errors=True)
+
     def test_run_raw_amplicon_pipeline_writes_success_summary(self) -> None:
         temp_path = Path("tests") / f"tmp_pipeline_{uuid4().hex}"
         temp_path.mkdir(parents=True, exist_ok=True)
@@ -329,6 +434,7 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
                     sintax_cutoff=0.1,
                     filter_route="16s",
                     threads=1,
+                    merge_backend=MERGE_BACKEND_PYTHON,
                     usearch_path="",
                     vsearch_path="",
                     beta_tree_path=".",
@@ -342,6 +448,7 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
             self.assertEqual(summary["status"], "success")
             self.assertIsNone(summary["failed_step"])
             self.assertEqual(summary["effective_params"]["params_source"], str((temp_path / "pipeline_params.yaml").resolve()))
+            self.assertEqual(summary["effective_params"]["merge_backend"], MERGE_BACKEND_PYTHON)
             self.assertIsNone(summary["effective_params"]["usearch_path"])
             self.assertIsNone(summary["effective_params"]["vsearch_path"])
             self.assertTrue(Path(summary["effective_params"]["beta_tree_path"]).is_file())
@@ -432,6 +539,7 @@ class RawAmpliconPipelineAnalysisTests(unittest.TestCase):
                         fastq_stripleft=0,
                         fastq_stripright=0,
                         fastq_maxee_rate=0.01,
+                        merge_backend=MERGE_BACKEND_PYTHON,
                     )
 
             summary_path = output_root / "06_final" / "run_summary.json"

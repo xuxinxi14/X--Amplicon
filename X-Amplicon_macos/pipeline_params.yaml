@@ -11,7 +11,7 @@ run_pipeline:
 
   read1_suffix: _1.fq.gz
   read2_suffix: _2.fq.gz
-
+  merge_backend: vsearch
   fastq_stripleft: 29
   fastq_stripright: 18
   fastq_maxee_rate: 0.01

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 
 import { api, formatApiError } from '../api/client';
+import type { TableExportFormat } from '../api/types';
 import type { Messages } from '../i18n';
 
 interface ResultTableProps {
@@ -21,10 +22,17 @@ function parseDelimited(text: string, maxRows: number): { columns: string[]; row
   return { columns, rows };
 }
 
+function tableStem(path: string, format: TableExportFormat): string {
+  const name = path.replace(/\\/g, '/').split('/').pop() || 'table';
+  return `${name.replace(/\.[^.]+$/, '')}.${format}`;
+}
+
 export function ResultTable({ path, projectId, messages, maxRows = 20 }: ResultTableProps) {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<TableExportFormat | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -35,6 +43,7 @@ export function ResultTable({ path, projectId, messages, maxRows = 20 }: ResultT
       }
       setLoading(true);
       setError(null);
+      setExportError(null);
       try {
         const response = await api.readFile(path, projectId);
         if (!cancelled) {
@@ -58,6 +67,29 @@ export function ResultTable({ path, projectId, messages, maxRows = 20 }: ResultT
 
   const table = useMemo(() => parseDelimited(text, maxRows), [maxRows, text]);
 
+  async function downloadExport(format: TableExportFormat) {
+    if (!path) {
+      return;
+    }
+    setExporting(format);
+    setExportError(null);
+    try {
+      const blob = await api.exportTable(path, format, projectId, maxRows);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = tableStem(path, format);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (err) {
+      setExportError(formatApiError(err));
+    } finally {
+      setExporting(null);
+    }
+  }
+
   if (!path) {
     return <div className="empty-state compact"><p>{messages.results.tableMissing}</p></div>;
   }
@@ -75,10 +107,22 @@ export function ResultTable({ path, projectId, messages, maxRows = 20 }: ResultT
     <div className="table-preview">
       <div className="table-preview-header">
         <span>{messages.results.previewRows.replace('{count}', String(table.rows.length))}</span>
-        <a className="button-link" href={api.fileDownloadUrl(path, projectId)}>
-          {messages.results.download}
-        </a>
+        <div className="inline-actions">
+          <a className="button-link" href={api.fileDownloadUrl(path, projectId)}>
+            {messages.results.download}
+          </a>
+          <button type="button" onClick={() => void downloadExport('png')} disabled={exporting !== null}>
+            {exporting === 'png' ? messages.loading : messages.results.exportPng}
+          </button>
+          <button type="button" onClick={() => void downloadExport('svg')} disabled={exporting !== null}>
+            {exporting === 'svg' ? messages.loading : messages.results.exportSvg}
+          </button>
+          <button type="button" onClick={() => void downloadExport('pdf')} disabled={exporting !== null}>
+            {exporting === 'pdf' ? messages.loading : messages.results.exportPdf}
+          </button>
+        </div>
       </div>
+      {exportError ? <div className="alert alert-error">{exportError}</div> : null}
       <div className="table-wrap">
         <table className="data-table compact-table">
           <thead>

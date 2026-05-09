@@ -21,7 +21,7 @@ class WebUISettings(WebUIBaseModel):
     default_sample_id_col: str = "SampleID"
     usearch_path: str = r"bin\windows\usearch.exe"
     vsearch_path: str = r"bin\windows\vsearch.exe"
-    default_plot_format: Literal["html", "png", "pdf", "svg", "all"] = "html"
+    default_plot_format: Literal["html", "png", "pdf", "svg", "all"] = "all"
     authorized_dirs: list[str] = Field(default_factory=list)
 
 

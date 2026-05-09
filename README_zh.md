@@ -3,21 +3,20 @@
 # 🧬 X-Amplicon
 作者：徐新玺
 
-X-Amplicon 是一个以 Windows 本地环境为核心的 16S rRNA 扩增子分析 Agent 与 Web UI，同时提供 Linux x86_64 和 macOS 发行工作区，灵活支持命令行与浏览器两种部署方式。只需提供双端 FASTQ 文件和 metadata 表，即可一站式生成 OTU/ASV 表、物种注释、alpha/beta 多样性分析、论文级可视化图表、差异丰度分析结果、分析报告以及完整的可复现性记录。
+X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 Agent 和 Web UI，同时提供 Linux x86_64 服务器包，支持命令行和浏览器部署。它可以从双端 FASTQ 文件和 metadata 表出发，生成 OTU/ASV 表、物种注释、alpha/beta 多样性、论文级可视化、差异丰度图表、分析报告和可复现性记录。
 
 > 💡 **推荐使用方式**：本地浏览器 Web UI。测序文件始终保留在您的电脑上，向导界面手把手引导每一步分析，底层调用与 CLI 完全一致的确定性 Python 工作流。LLM API key 为可选配置，没有也能顺畅使用。
 
 ## ✨ 项目亮点
 
-- 🖥️ 专为湿实验用户打造的 Windows 本地 Web UI，开箱即用，无需折腾环境。
-- 📦 一键 Windows 安装器，内置 Python 运行时、RDP 16S 小型数据库、USEARCH/VSEARCH 及预构建 Web UI，双击即跑。
-- 🐧 Linux x86_64 发行包，含 setup 脚本、Web UI、CLI 启动器、内置小型 RDP 数据库及服务器测试流程。
-- 🍎 macOS 预览包，同样提供 setup、Web UI 与 CLI 启动器，`bin/usearch` 会自动识别 Intel 或 Apple Silicon 架构并调用对应的 USEARCH 12。
-- 🤖 Agent 页面：分析前自动检查数据与环境是否就绪，并提供分步骤操作引导。
-- 🔁 `process.py` 确定性工作流，保障分析结果可复现、流程可自动化。
-- 🚫🔑 无 LLM 模式下也可完成本地检查、可视化、报告生成及绝大部分辅助功能。
-- ⚙️ 可在 Web UI 中随时配置 LLM：API key、API base URL 和模型切换，一切都在界面里完成。
-- 📊 丰富的输出格式：Plotly 交互图表、HTML/Markdown 报告、`run_summary.json` 与 provenance 溯源文件，让每次分析都有迹可查。
+- 面向湿实验用户的 Windows 本地 Web UI。
+- 一键 Windows 安装器内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
+- Linux x86_64 包提供 setup、Web UI、CLI 启动脚本、内置小型 RDP 数据库和服务器测试流程。
+- Agent 页面提供分析前准备检查和分步引导。
+- `process.py` 提供可复现、可自动化的确定性工作流。
+- 无 LLM 模式下也可完成本地检查、可视化、报告生成和大部分帮助功能。
+- 可在 Web UI 中配置 LLM：API key、API base URL 和模型切换。
+- 输出包括 Plotly 图表、HTML/Markdown 报告、`run_summary.json` 和 provenance 文件。
 
 <img width="1012" height="674" alt="938062bfa773ad3c8fb3c77fbd489a0" src="https://github.com/user-attachments/assets/6b658afc-96fb-4a2f-b07b-b74279233c53" />
 
@@ -90,9 +89,9 @@ powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -Port 8770
 powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -NoBrowser
 ```
 
-## 🐧 快速开始：Linux x86_64 服务器
+## 快速开始：Linux x86_64 服务器
 
-Linux 发行工作区适用于 Ubuntu 22.04 x86_64 或其他兼容的 x86_64 Linux 服务器：
+Linux 发行工作区面向 Ubuntu 22.04 x86_64 或兼容的 x86_64 Linux 服务器：
 
 ```bash
 cd /path/to/X-Amplicon_linux_x86_64
@@ -116,69 +115,30 @@ chmod +x setup_linux.sh start_webui.sh run_process.sh run_agent.sh
 ./run_process.sh generate-report --final-dir work/06_final
 ```
 
-Linux Web UI 需要在终端里启动，不会自动弹出浏览器：
+Linux Web UI 需要在终端里启动，不要在 Jupyter 文件列表中直接点击 `.sh` 文件：
 
 ```bash
 ./start_webui.sh --no-browser
 ```
 
-如果通过 SSH 远程访问服务器，可以在本地电脑执行端口转发，把远端 Web UI 映射到本地：
+如果通过 SSH 访问服务器，在本地电脑执行端口转发：
 
 ```bash
 ssh -N -L 8765:127.0.0.1:8765 user@server
 ```
 
-然后在本地浏览器打开 `http://127.0.0.1:8765`，体验和在本机操作无异。
+然后打开 `http://127.0.0.1:8765`。
 
-如果想通过 SSH 浏览离线 HTML 报告，建议在服务器上启动仅监听本地的 HTTP 服务，再配合端口转发访问：
+如果要通过 SSH 查看离线 HTML 报告，建议在服务器上启动本地 HTTP 服务：
 
 ```bash
 .venv/bin/python -m http.server 8899 --bind 127.0.0.1
 ssh -N -L 8899:127.0.0.1:8899 user@server
 ```
 
-然后在本地打开 `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`，离线报告一览无余。
+然后打开 `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`。
 
-## 🍎 快速开始：macOS 预览版
-
-macOS 发行工作区同时支持 Intel 和 Apple Silicon 两种架构：
-
-```bash
-cd /path/to/X-Amplicon_macos
-chmod +x setup_macos.sh start_webui.sh run_process.sh run_agent.sh \
-  bin/usearch bin/usearch_osx_m_12.0-beta bin/usearch_osx_x86_12.0-beta bin/vsearch
-./setup_macos.sh
-```
-
-`bin/usearch` 是一个自动识别架构的 wrapper：Apple Silicon 机型会调用
-`usearch_osx_m_12.0-beta`，Intel macOS 则调用
-`usearch_osx_x86_12.0-beta`。当前内置的 VSEARCH 为 x86_64 版本；
-Apple Silicon 用户若遇到无法运行的情况，安装 Rosetta 2 即可解决。
-
-检查 macOS pipeline 配置：
-
-```bash
-./run_process.sh check-pipeline-config --params pipeline_params.macos.yaml
-```
-
-运行完整 CLI 流程：
-
-```bash
-./run_process.sh run-pipeline-config --params pipeline_params.macos.yaml
-./run_process.sh visualization-suite --final-dir work/06_final --format html
-./run_process.sh generate-report --final-dir work/06_final
-```
-
-启动 macOS Web UI：
-
-```bash
-./start_webui.sh --no-browser
-```
-
-然后在浏览器打开 `http://127.0.0.1:8765`，完整说明请参阅
-`X-Amplicon_macos/README_MACOS_zh.md`。
-
-## 🖱️ Web UI 使用流程
+## Web UI 使用流程
 
 推荐按以下顺序使用，循序渐进，不易出错：
 
@@ -248,7 +208,9 @@ work\06_final
 | 分析报告 | `work\06_final\report\analysis_report.html` |
 | 可复现性记录 | `work\06_final\run_summary.json`、`provenance.json`、`provenance.md` |
 
-CLI 的 `run-pipeline-config` 命令会先输出核心分析结果；`plots/` 和 `report/` 目录需要在 pipeline 完成后，继续执行 `visualization-suite` 和 `generate-report` 才会生成。图表会按类型分目录存放，整洁不杂乱。
+CLI 的 `run-pipeline-config` 会先生成核心分析结果。`plots/` 和 `report/`
+需要在 pipeline 完成后继续运行 `visualization-suite` 和 `generate-report`。
+图表会按类型放入不同子目录，而不是全部混放在一个文件夹。
 
 ## 🤖 可选 LLM Agent
 
@@ -306,7 +268,31 @@ python agent_cli.py --offline
 
 常用 slash commands 包括 `/params`、`/status`、`/tools`、`/language`、`/report`、`/config` 和 `/quit`，输入 `/help` 可随时查看帮助。
 
-## 📦 依赖
+## Linux 打包方式
+
+Linux 没有完全等同于 Windows `.exe` 安装器的统一格式。常见选择如下：
+
+| 方式 | 适用场景 | 说明 |
+| --- | --- | --- |
+| 便携 `tar.gz` 包 | 推荐用于服务器和集群 | 分发整个项目目录，在目标机器运行 `setup_linux.sh`，再用 shell 启动脚本运行。 |
+| AppImage | 最接近桌面双击体验 | 可以生成单个 Linux 应用文件，但需要额外打包工作，并按发行版测试。 |
+| PyInstaller/Nuitka 可执行文件 | CLI 或启动器二进制 | 可以生成 Linux ELF 可执行文件，但 Web UI 静态资源、数据库、USEARCH/VSEARCH 仍需一起打包或放在旁边。 |
+| `.deb` 包 | Ubuntu 内部部署 | 适合由 IT 统一安装，但需要维护 Debian 包元数据和安装脚本。 |
+
+对当前项目，最稳妥的 Linux “类 exe”发布方式是便携目录压缩包：
+
+```bash
+cd ..
+tar --exclude='X-Amplicon_linux_x86_64/.venv' \
+    --exclude='X-Amplicon_linux_x86_64/work' \
+    --exclude='X-Amplicon_linux_x86_64/seq' \
+    --exclude='X-Amplicon_linux_x86_64/.env' \
+    -czf X-Amplicon_linux_x86_64.tar.gz X-Amplicon_linux_x86_64
+```
+
+用户解压后运行 `./setup_linux.sh`，再用 `./start_webui.sh --no-browser` 或 `./run_process.sh ...`。如果后续要做 PyInstaller/AppImage，请在与目标服务器兼容的 Linux 系统上构建，并先确认 USEARCH 等外部工具的再分发许可。
+
+## 依赖
 
 Windows 安装器已经内置普通使用所需的完整运行环境，无需额外操作。源码用户需要手动安装以下依赖：
 

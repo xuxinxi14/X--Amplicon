@@ -425,6 +425,7 @@ def _iter_fasta_records(
                 sequence=bytes(current_sequence),
             )
 
+
 def _append_stripped_warning(stripped_counter: Counter[int], warnings: list[str]) -> None:
     """把序列字符剥离统计整理成一条结构化警告。"""
     if not stripped_counter:

@@ -2,20 +2,11 @@
 
 from __future__ import annotations
 
-import os
 from typing import Any, Literal
 
 from pydantic import Field
 
 from webui.backend.models.common import WebUIBaseModel, utc_now_iso
-
-
-def default_usearch_path() -> str:
-    return r"bin\windows\usearch.exe" if os.name == "nt" else "bin/usearch"
-
-
-def default_vsearch_path() -> str:
-    return r"bin\windows\vsearch.exe" if os.name == "nt" else "bin/vsearch"
 
 
 class ProjectCreate(WebUIBaseModel):
@@ -42,6 +33,7 @@ class ProjectUpdate(WebUIBaseModel):
     read2_suffix: str | None = None
     params_path: str | None = None
     last_job_id: str | None = None
+    last_preflight_job_id: str | None = None
 
 
 class ProjectRecord(WebUIBaseModel):
@@ -60,6 +52,7 @@ class ProjectRecord(WebUIBaseModel):
     read2_suffix: str = "_2.fq.gz"
     params_path: str | None = None
     last_job_id: str | None = None
+    last_preflight_job_id: str | None = None
     created_at: str = Field(default_factory=utc_now_iso)
     updated_at: str = Field(default_factory=utc_now_iso)
 
@@ -131,6 +124,7 @@ class PipelineParamsDraft(WebUIBaseModel):
     output_root: str = "work"
     read1_suffix: str = "_1.fq.gz"
     read2_suffix: str = "_2.fq.gz"
+    merge_backend: Literal["vsearch", "python"] = "vsearch"
     fastq_stripleft: int = 29
     fastq_stripright: int = 18
     fastq_maxee_rate: float = 0.01
@@ -148,8 +142,8 @@ class PipelineParamsDraft(WebUIBaseModel):
     rarefaction_depth: int = 8000
     rarefaction_seed: int = 1
     threads: int = 1
-    usearch_path: str | None = Field(default_factory=default_usearch_path)
-    vsearch_path: str | None = Field(default_factory=default_vsearch_path)
+    usearch_path: str | None = r"bin\windows\usearch.exe"
+    vsearch_path: str | None = r"bin\windows\vsearch.exe"
     command_timeout: float | None = None
     color_palette: str | None = None
     differential: dict[str, Any] = Field(default_factory=dict)

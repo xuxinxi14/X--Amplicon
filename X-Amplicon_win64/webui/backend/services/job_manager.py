@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import subprocess
 import threading
@@ -12,6 +13,23 @@ from webui.backend.config import get_jobs_dir
 from webui.backend.models.common import CommandSpec, utc_now_iso
 from webui.backend.models.job import JobEvent, JobRecord
 from webui.backend.services.json_store import read_json, write_json
+
+ACTIVE_JOB_STATUSES = {"queued", "checking", "running"}
+
+
+def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
+    if os.name == "nt":
+        try:
+            subprocess.run(
+                ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+            return
+        except Exception:
+            pass
+    process.terminate()
 
 
 class JobManager:
@@ -29,6 +47,13 @@ class JobManager:
 
     def _event_path(self, job_id: str) -> Path:
         return get_jobs_dir() / f"{job_id}.events.jsonl"
+
+    def _delete_job_files(self, job_id: str) -> None:
+        for path in (self._job_path(job_id), self._log_path(job_id), self._event_path(job_id)):
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
 
     def _save(self, record: JobRecord) -> None:
         write_json(self._job_path(record.id), record.model_dump(mode="json"))
@@ -395,6 +420,39 @@ class JobManager:
             return records[:limit]
         return records
 
+    def active_jobs(self, *, project_id: str | None = None) -> list[JobRecord]:
+        """Return persisted jobs that should block history deletion."""
+
+        return [
+            job
+            for job in self.list_jobs()
+            if job.status in ACTIVE_JOB_STATUSES and (project_id is None or job.project_id == project_id)
+        ]
+
+    def delete_jobs_for_project(self, project_id: str) -> int:
+        """Delete finished job records for one project."""
+
+        if self.active_jobs(project_id=project_id):
+            raise ValueError("Cannot clear history while jobs are running. Cancel or wait for active jobs first.")
+        jobs = [job for job in self.list_jobs() if job.project_id == project_id]
+        for job in jobs:
+            self._delete_job_files(job.id)
+        return len(jobs)
+
+    def clear_job_history(self) -> int:
+        """Delete all finished job records."""
+
+        if self.active_jobs():
+            raise ValueError("Cannot clear history while jobs are running. Cancel or wait for active jobs first.")
+        jobs = self.list_jobs()
+        for path in get_jobs_dir().glob("*"):
+            if path.suffix == ".log" or path.suffix == ".json" or path.name.endswith(".events.jsonl"):
+                try:
+                    path.unlink()
+                except FileNotFoundError:
+                    pass
+        return len(jobs)
+
     def get_logs(self, job_id: str, *, tail_lines: int | None = None) -> dict[str, Any]:
         """Return job logs, optionally tailed."""
 
@@ -425,7 +483,7 @@ class JobManager:
         record.message = "Cancellation requested."
         self._save(record)
         self.emit_event(job_id, status="cancelled", message="Cancellation requested.")
-        process.terminate()
+        _terminate_process_tree(process)
         return record
 
 

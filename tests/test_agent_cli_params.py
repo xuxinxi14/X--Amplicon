@@ -51,6 +51,10 @@ class AgentCliPipelineParamTests(unittest.TestCase):
             _parse_pipeline_param_value("filter_route", "ITS"),
             "its",
         )
+        self.assertEqual(
+            _parse_pipeline_param_value("merge_backend", "PYTHON"),
+            "python",
+        )
 
     def test_parse_pipeline_param_value_rejects_invalid_value(self) -> None:
         with self.assertRaises(ValueError):
@@ -58,6 +62,9 @@ class AgentCliPipelineParamTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _parse_pipeline_param_value("feature_method", "bad-method")
+
+        with self.assertRaises(ValueError):
+            _parse_pipeline_param_value("merge_backend", "bad-backend")
 
     def test_resolve_pipeline_param_key_accepts_index_and_case_insensitive_name(self) -> None:
         params = {key: key for key in PIPELINE_PARAM_ORDER}
@@ -227,6 +234,7 @@ class AgentCliPipelineParamTests(unittest.TestCase):
         properties = run_schema["function"]["parameters"]["properties"]
 
         self.assertNotIn("beta_tree_path", properties)
+        self.assertEqual(properties["merge_backend"]["default"], "vsearch")
 
 
 class AgentToolSessionDefaultTests(unittest.TestCase):

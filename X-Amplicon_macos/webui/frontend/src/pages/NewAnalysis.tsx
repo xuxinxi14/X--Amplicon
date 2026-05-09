@@ -216,7 +216,7 @@ export function NewAnalysis({
   const [comparisonCase, setComparisonCase] = useState('');
   const [comparisonControl, setComparisonControl] = useState('');
   const [comparisons, setComparisons] = useState<string[]>([]);
-  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -296,6 +296,7 @@ export function NewAnalysis({
   function setInputField<K extends keyof InputForm>(key: K, value: InputForm[K]) {
     setInputForm((current) => ({ ...current, [key]: value }));
     setParamsResult(null);
+    setPreflightJob(null);
     if (key === 'metadata_path' || key === 'sample_id_col' || key === 'group_col') {
       setMetadataResult(null);
     }
@@ -307,6 +308,7 @@ export function NewAnalysis({
   function setAnalysisField<K extends keyof AnalysisForm>(key: K, value: AnalysisForm[K]) {
     setAnalysisForm((current) => ({ ...current, [key]: value }));
     setParamsResult(null);
+    setPreflightJob(null);
   }
 
   async function createOrUpdateProject() {
@@ -441,15 +443,15 @@ export function NewAnalysis({
       rarefaction_depth: analysisForm.rarefaction_depth,
       rarefaction_seed: analysisForm.rarefaction_seed,
       threads: analysisForm.threads,
-      usearch_path: settings?.usearch_path || 'bin/usearch',
-      vsearch_path: settings?.vsearch_path || 'bin/vsearch',
+      usearch_path: settings?.usearch_path || 'bin\\windows\\usearch.exe',
+      vsearch_path: settings?.vsearch_path || 'bin\\windows\\vsearch.exe',
       command_timeout: commandTimeout ? Number(commandTimeout) : null,
       color_palette: nonEmpty(analysisForm.color_palette),
       differential: {
         group_col: inputForm.group_col,
         reference_group: nonEmpty(referenceGroup),
         comparisons,
-        output_format: settings?.default_plot_format || 'html'
+        output_format: settings?.default_plot_format || 'all'
       }
     };
   }
@@ -494,7 +496,8 @@ export function NewAnalysis({
     try {
       const result = await api.writeParams(project.id, buildParamsDraft());
       setParamsResult(result);
-      setNotice(result.message);
+      setPreflightJob(null);
+      setNotice(formatApiError(result.message));
     } catch (err) {
       setError(formatApiError(err));
     } finally {
@@ -559,6 +562,21 @@ export function NewAnalysis({
     }
   }
 
+  async function pickPath(kind: 'file' | 'directory', title: string, onPicked: (path: string) => void) {
+    setBusy('picker');
+    setError(null);
+    try {
+      const result = await api.pickPath(kind, title);
+      if (result.path) {
+        onPicked(result.path);
+      }
+    } catch (err) {
+      setError(formatApiError(err));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   function canEnterStep(targetIndex: number): boolean {
     if (targetIndex <= stepIndex) {
       return true;
@@ -607,13 +625,23 @@ export function NewAnalysis({
             <input
               value={projectForm.project_dir}
               onChange={(event) => setProjectField('project_dir', event.target.value)}
-              placeholder={projectRoot || '/path/to/X-Amplicon_mac'}
+              placeholder={projectRoot || 'D:\\path\\to\\X-Amplicon'}
             />
             <small>{t.projectDirHelp}</small>
           </label>
           <label className="field">
             <span>{t.outputRoot}</span>
-            <input value={projectForm.output_root} onChange={(event) => setProjectField('output_root', event.target.value)} />
+            <div className="inline-input">
+              <input value={projectForm.output_root} onChange={(event) => setProjectField('output_root', event.target.value)} />
+              <button
+                type="button"
+                onClick={() => void pickPath('directory', t.pickOutputRoot, (path) => setProjectField('output_root', path))}
+                disabled={busy === 'picker'}
+              >
+                {t.pickFolder}
+              </button>
+            </div>
+            <small>{t.filePickerHelp}</small>
           </label>
         </div>
         <div className="inline-actions">
@@ -637,18 +665,38 @@ export function NewAnalysis({
         <div className="panel-header">
           <h2>{t.inputStep}</h2>
           <div className="inline-actions">
-            {metadataResult ? <StatusBadge status={metadataResult.status} label={metadataResult.status} /> : null}
-            {pairPreview ? <StatusBadge status={pairPreview.status} label={pairPreview.status} /> : null}
+            {metadataResult ? <StatusBadge status={metadataResult.status} label={statusText(metadataResult.status, messages)} /> : null}
+            {pairPreview ? <StatusBadge status={pairPreview.status} label={statusText(pairPreview.status, messages)} /> : null}
           </div>
         </div>
         <div className="form-grid two-columns">
           <label className="field">
             <span>{t.metadataPath}</span>
-            <input value={inputForm.metadata_path} onChange={(event) => setInputField('metadata_path', event.target.value)} />
+            <div className="inline-input">
+              <input value={inputForm.metadata_path} onChange={(event) => setInputField('metadata_path', event.target.value)} />
+              <button
+                type="button"
+                onClick={() => void pickPath('file', t.pickMetadata, (path) => setInputField('metadata_path', path))}
+                disabled={busy === 'picker'}
+              >
+                {t.pickFile}
+              </button>
+            </div>
+            <small>{t.filePickerHelp}</small>
           </label>
           <label className="field">
             <span>{t.seqDir}</span>
-            <input value={inputForm.seq_dir} onChange={(event) => setInputField('seq_dir', event.target.value)} />
+            <div className="inline-input">
+              <input value={inputForm.seq_dir} onChange={(event) => setInputField('seq_dir', event.target.value)} />
+              <button
+                type="button"
+                onClick={() => void pickPath('directory', t.pickSeqDir, (path) => setInputField('seq_dir', path))}
+                disabled={busy === 'picker'}
+              >
+                {t.pickFolder}
+              </button>
+            </div>
+            <small>{t.filePickerHelp}</small>
           </label>
           <label className="field">
             <span>{t.sampleIdCol}</span>
@@ -695,8 +743,8 @@ export function NewAnalysis({
                 <div><span>{t.columns}</span><strong>{metadataResult.columns}</strong></div>
                 <div><span>{t.groups}</span><strong>{metadataResult.groups.length}</strong></div>
               </div>
-              {metadataResult.messages.length ? <ul className="message-list">{metadataResult.messages.map((item) => <li key={item}>{item}</li>)}</ul> : null}
-              {metadataResult.suggestions.length ? <ul className="suggestion-list">{metadataResult.suggestions.map((item) => <li key={item}>{item}</li>)}</ul> : null}
+              {metadataResult.messages.length ? <ul className="message-list">{metadataResult.messages.map((item) => <li key={item}>{formatApiError(item)}</li>)}</ul> : null}
+              {metadataResult.suggestions.length ? <ul className="suggestion-list">{metadataResult.suggestions.map((item) => <li key={item}>{formatApiError(item)}</li>)}</ul> : null}
             </section>
           ) : null}
 
@@ -709,10 +757,19 @@ export function NewAnalysis({
                 <div><span>{t.missingR1}</span><strong>{pairPreview.missing_read1.length}</strong></div>
                 <div><span>{t.missingR2}</span><strong>{pairPreview.missing_read2.length}</strong></div>
               </div>
-              {pairPreview.missing_read1.length || pairPreview.missing_read2.length || pairPreview.extra_fastq_files.length ? (
+              {pairPreview.messages.length ? <ul className="message-list">{pairPreview.messages.map((item) => <li key={item}>{formatApiError(item)}</li>)}</ul> : null}
+              {pairPreview.suggestions.length ? <ul className="suggestion-list">{pairPreview.suggestions.map((item) => <li key={item}>{formatApiError(item)}</li>)}</ul> : null}
+              {pairPreview.missing_read1.length || pairPreview.missing_read2.length ? (
                 <div className="warning-block">
-                  <strong>{t.unmatchedFiles}</strong>
-                  <p>{[...pairPreview.missing_read1, ...pairPreview.missing_read2, ...pairPreview.extra_fastq_files].slice(0, 12).join(', ')}</p>
+                  <strong>{t.missingFiles}</strong>
+                  <p>{[...pairPreview.missing_read1, ...pairPreview.missing_read2].slice(0, 12).join(', ')}</p>
+                </div>
+              ) : null}
+              {pairPreview.extra_fastq_files.length ? (
+                <div className="warning-block">
+                  <strong>{t.extraFiles}</strong>
+                  <p>{pairPreview.extra_fastq_files.slice(0, 12).join(', ')}</p>
+                  <p>{t.extraFilesHelp}</p>
                 </div>
               ) : null}
             </section>
@@ -882,6 +939,7 @@ export function NewAnalysis({
           <label className="field">
             <span>{t.rarefactionDepth}</span>
             <input type="number" min={0} value={analysisForm.rarefaction_depth} onChange={(event) => setAnalysisField('rarefaction_depth', Number(event.target.value))} />
+            <small>{t.rarefactionDepthHelp}</small>
           </label>
           <label className="field">
             <span>{t.threads}</span>
@@ -905,46 +963,57 @@ export function NewAnalysis({
             <label className="field">
               <span>{t.fastqStripLeft}</span>
               <input type="number" min={0} value={analysisForm.fastq_stripleft} onChange={(event) => setAnalysisField('fastq_stripleft', Number(event.target.value))} />
+              <small>{t.fastqStripHelp}</small>
             </label>
             <label className="field">
               <span>{t.fastqStripRight}</span>
               <input type="number" min={0} value={analysisForm.fastq_stripright} onChange={(event) => setAnalysisField('fastq_stripright', Number(event.target.value))} />
+              <small>{t.fastqStripHelp}</small>
             </label>
             <label className="field">
               <span>{t.fastqMaxeeRate}</span>
               <input type="number" min={0.0001} step={0.001} value={analysisForm.fastq_maxee_rate} onChange={(event) => setAnalysisField('fastq_maxee_rate', Number(event.target.value))} />
+              <small>{t.fastqMaxeeRateHelp}</small>
             </label>
             <label className="field">
               <span>{t.featureMinsize}</span>
               <input type="number" min={1} value={analysisForm.feature_minsize} onChange={(event) => setAnalysisField('feature_minsize', Number(event.target.value))} />
+              <small>{t.featureMinsizeHelp}</small>
             </label>
             <label className="field">
               <span>{t.featureIdentity}</span>
               <input type="number" min={0.01} max={1} step={0.01} value={analysisForm.feature_identity} onChange={(event) => setAnalysisField('feature_identity', Number(event.target.value))} />
+              <small>{t.identityHelp}</small>
             </label>
             <label className="field">
               <span>{t.otutabIdentity}</span>
               <input type="number" min={0.01} max={1} step={0.01} value={analysisForm.otutab_identity} onChange={(event) => setAnalysisField('otutab_identity', Number(event.target.value))} />
+              <small>{t.identityHelp}</small>
             </label>
             <label className="field">
               <span>{t.sintaxCutoff}</span>
               <input type="number" min={0} max={1} step={0.01} value={analysisForm.sintax_cutoff} onChange={(event) => setAnalysisField('sintax_cutoff', Number(event.target.value))} />
+              <small>{t.sintaxCutoffHelp}</small>
             </label>
             <label className="field">
               <span>{t.rarefactionSeed}</span>
               <input type="number" min={0} value={analysisForm.rarefaction_seed} onChange={(event) => setAnalysisField('rarefaction_seed', Number(event.target.value))} />
+              <small>{t.rarefactionSeedHelp}</small>
             </label>
             <label className="field">
               <span>{t.betaTreePath}</span>
               <input value={analysisForm.beta_tree_path} onChange={(event) => setAnalysisField('beta_tree_path', event.target.value)} />
+              <small>{t.betaTreePathHelp}</small>
             </label>
             <label className="field">
               <span>{t.commandTimeout}</span>
               <input value={analysisForm.command_timeout} onChange={(event) => setAnalysisField('command_timeout', event.target.value)} placeholder={messages.auto} />
+              <small>{t.commandTimeoutHelp}</small>
             </label>
             <label className="field wide-field">
               <span>{t.colorPalette}</span>
               <input value={analysisForm.color_palette} onChange={(event) => setAnalysisField('color_palette', event.target.value)} placeholder="#2f6f73,#d8903f,#6b8f71" />
+              <small>{t.colorPaletteHelp}</small>
             </label>
           </div>
         ) : null}

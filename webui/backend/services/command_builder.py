@@ -37,7 +37,7 @@ def run_pipeline_config(params_path: str, settings: WebUISettings | None = None)
 def visualization_suite(
     final_dir: str,
     *,
-    output_format: str = "html",
+    output_format: str = "all",
     metadata: str | None = None,
     sample_id_col: str = "SampleID",
     group_col: str = "Group",

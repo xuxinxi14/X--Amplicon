@@ -70,6 +70,7 @@ export interface ProjectRecord {
   read2_suffix: string;
   params_path: string | null;
   last_job_id: string | null;
+  last_preflight_job_id: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -94,6 +95,7 @@ export interface ProjectUpdatePayload {
   read2_suffix?: string | null;
   params_path?: string | null;
   last_job_id?: string | null;
+  last_preflight_job_id?: string | null;
 }
 
 export interface GroupSummary {
@@ -153,6 +155,7 @@ export interface PipelineParamsDraft {
   output_root?: string;
   read1_suffix?: string;
   read2_suffix?: string;
+  merge_backend?: 'vsearch' | 'python';
   fastq_stripleft?: number;
   fastq_stripright?: number;
   fastq_maxee_rate?: number;
@@ -207,6 +210,27 @@ export interface JobLogsResponse {
   job_id: string;
   log_path: string;
   text: string;
+}
+
+export interface JobProgressStep {
+  key: string;
+  status: string;
+  message: string;
+  error: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  duration_seconds: number | null;
+  source: string;
+}
+
+export interface JobProgressResponse {
+  job_id: string;
+  status: string;
+  current_step: string | null;
+  failed_step: string | null;
+  message: string;
+  steps: JobProgressStep[];
+  warnings: string[];
 }
 
 export interface DatabaseRecord {
@@ -323,10 +347,14 @@ export interface AgentChatResponse {
   warnings: string[];
 }
 
+export type ResultFigureFormat = 'html' | 'png' | 'svg' | 'pdf';
+export type TableExportFormat = 'png' | 'svg' | 'pdf';
+
 export interface ResultFigure {
   label: string;
   path: string;
   category: string;
+  formats?: Partial<Record<ResultFigureFormat, string>>;
 }
 
 export interface DifferentialComparisonResult {
@@ -337,6 +365,8 @@ export interface DifferentialComparisonResult {
   significant_features: number | null;
   volcano: string | null;
   heatmap: string | null;
+  volcano_formats?: Partial<Record<ResultFigureFormat, string>>;
+  heatmap_formats?: Partial<Record<ResultFigureFormat, string>>;
 }
 
 export interface ResultIndex {
@@ -374,6 +404,10 @@ export interface FileEntry {
 export interface FileListResponse {
   path: string;
   entries: FileEntry[];
+}
+
+export interface FilePickResponse {
+  path: string | null;
 }
 
 export interface ApiErrorPayload {

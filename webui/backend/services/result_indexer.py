@@ -12,6 +12,8 @@ from webui.backend.models.results import (
     ResultIndex,
 )
 
+FIGURE_FORMATS = ("html", "png", "svg", "pdf")
+
 
 def _exists(path: Path) -> str | None:
     return str(path.resolve()) if path.is_file() else None
@@ -28,17 +30,37 @@ def _count_table_rows(path: Path) -> int | None:
     return max(0, count - 1)
 
 
-def _html_figures(root: Path, category: str, pattern: str = "*.html") -> list[ResultFigure]:
+def _preferred_figure_path(formats: dict[str, str]) -> str | None:
+    for suffix in FIGURE_FORMATS:
+        if suffix in formats:
+            return formats[suffix]
+    return None
+
+
+def _figure_formats(root: Path, stem: str) -> dict[str, str]:
+    formats: dict[str, str] = {}
+    for suffix in FIGURE_FORMATS:
+        path = root / f"{stem}.{suffix}"
+        if path.is_file():
+            formats[suffix] = str(path.resolve())
+    return formats
+
+
+def _figures(root: Path, category: str) -> list[ResultFigure]:
     if not root.is_dir():
         return []
-    figures: list[ResultFigure] = []
-    for path in sorted(root.glob(pattern)):
-        if path.is_file():
+    stems = sorted({path.stem for path in root.iterdir() if path.is_file() and path.suffix.lower().lstrip(".") in FIGURE_FORMATS})
+    figures = []
+    for stem in stems:
+        formats = _figure_formats(root, stem)
+        preferred = _preferred_figure_path(formats)
+        if preferred:
             figures.append(
                 ResultFigure(
                     category=category,
-                    label=path.stem.replace("_", " "),
-                    path=str(path.resolve()),
+                    label=stem.replace("_", " "),
+                    path=preferred,
+                    formats=formats,
                 )
             )
     return figures
@@ -46,14 +68,14 @@ def _html_figures(root: Path, category: str, pattern: str = "*.html") -> list[Re
 
 def _collect_plot_figures(plots_root: Path) -> dict[str, list[ResultFigure]]:
     return {
-        "alpha": _html_figures(plots_root / "alpha_boxplot_chart", "alpha")
-        + _html_figures(plots_root / "alpha_barplot_chart", "alpha")
-        + _html_figures(plots_root / "alpha_rare_chart", "alpha"),
-        "beta": _html_figures(plots_root / "beta_pcoa_chart", "beta")
-        + _html_figures(plots_root / "beta_cpcoa_chart", "beta")
-        + _html_figures(plots_root / "beta_heatmap_chart", "beta"),
-        "taxonomy": _html_figures(plots_root / "taxonomy_stacked_bar_chart", "taxonomy")
-        + _html_figures(plots_root / "taxonomy_heatmap_chart", "taxonomy"),
+        "alpha": _figures(plots_root / "alpha_boxplot_chart", "alpha")
+        + _figures(plots_root / "alpha_barplot_chart", "alpha")
+        + _figures(plots_root / "alpha_rare_chart", "alpha"),
+        "beta": _figures(plots_root / "beta_pcoa_chart", "beta")
+        + _figures(plots_root / "beta_cpcoa_chart", "beta")
+        + _figures(plots_root / "beta_heatmap_chart", "beta"),
+        "taxonomy": _figures(plots_root / "taxonomy_stacked_bar_chart", "taxonomy")
+        + _figures(plots_root / "taxonomy_heatmap_chart", "taxonomy"),
     }
 
 
@@ -67,6 +89,8 @@ def _collect_differential(final_dir: Path) -> list[DifferentialComparisonResult]
         comparison = comparison_dir.name
         result_path = comparison_dir / "differential_results.tsv"
         significant_path = comparison_dir / "differential_results_significant.tsv"
+        volcano_formats = _figure_formats(root / "volcano_chart" / comparison, "volcano")
+        heatmap_formats = _figure_formats(root / "heatmap_chart" / comparison, "heatmap")
         comparisons.append(
             DifferentialComparisonResult(
                 comparison=comparison,
@@ -74,8 +98,10 @@ def _collect_differential(final_dir: Path) -> list[DifferentialComparisonResult]
                 significant_path=_exists(significant_path),
                 tested_features=_count_table_rows(result_path),
                 significant_features=_count_table_rows(significant_path) or 0,
-                volcano=_exists(root / "volcano_chart" / comparison / "volcano.html"),
-                heatmap=_exists(root / "heatmap_chart" / comparison / "heatmap.html"),
+                volcano=_preferred_figure_path(volcano_formats),
+                heatmap=_preferred_figure_path(heatmap_formats),
+                volcano_formats=volcano_formats,
+                heatmap_formats=heatmap_formats,
             )
         )
     return comparisons

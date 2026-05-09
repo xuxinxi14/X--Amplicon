@@ -30,6 +30,10 @@ HTML_LINK_ATTR_PATTERN = re.compile(
     r"(?P<prefix>\b(?:src|href)\s*=\s*)(?P<quote>[\"'])(?P<url>.*?)(?P=quote)",
     flags=re.IGNORECASE,
 )
+HTML_RAW_BLOCK_PATTERN = re.compile(
+    r"<(?:script|style)\b.*?</(?:script|style)>",
+    flags=re.IGNORECASE | re.DOTALL,
+)
 
 
 def _should_rewrite_html_url(url: str) -> bool:
@@ -92,7 +96,14 @@ def rewrite_html_links_for_file_view(
         rewritten = f"{route_prefix}?{urlencode(query, quote_via=quote)}{fragment}"
         return f"{prefix}{quote_char}{html.escape(rewritten, quote=True)}{quote_char}"
 
-    return HTML_LINK_ATTR_PATTERN.sub(replace, html_text)
+    parts: list[str] = []
+    cursor = 0
+    for block in HTML_RAW_BLOCK_PATTERN.finditer(html_text):
+        parts.append(HTML_LINK_ATTR_PATTERN.sub(replace, html_text[cursor:block.start()]))
+        parts.append(block.group(0))
+        cursor = block.end()
+    parts.append(HTML_LINK_ATTR_PATTERN.sub(replace, html_text[cursor:]))
+    return "".join(parts)
 
 
 def authorized_roots(

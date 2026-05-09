@@ -2,39 +2,41 @@
 
 # X-Amplicon
 
-X-Amplicon 是一个面向 Windows 本地环境的 16S rRNA 扩增子分析 Agent 和 Web UI。它可以从双端 FASTQ 文件和 metadata 表出发，生成 OTU/ASV 表、物种注释、alpha/beta 多样性、论文级可视化、差异丰度图表、分析报告和可复现性记录。
+X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 Agent 和 Web UI，同时提供 Linux x86_64 服务器包，支持命令行和浏览器部署。它可以从双端 FASTQ 文件和 metadata 表出发，生成 OTU/ASV 表、物种注释、alpha/beta 多样性、论文级可视化、差异丰度图表、分析报告和可复现性记录。
 
 推荐使用方式是本地浏览器 Web UI。Web UI 会把测序文件保留在用户电脑中，通过向导一步步引导分析，并调用与 CLI 相同的确定性 Python 工作流。LLM API key 是可选项。
 
 ## 项目亮点
 
 - 面向湿实验用户的 Windows 本地 Web UI。
-- 一键 Release 包内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
+- 一键 Windows 安装器内置 Python、RDP 16S 小型数据库、USEARCH/VSEARCH 和已构建 Web UI。
+- Linux x86_64 包提供 setup、Web UI、CLI 启动脚本、内置小型 RDP 数据库和服务器测试流程。
 - Agent 页面提供分析前准备检查和分步引导。
 - `process.py` 提供可复现、可自动化的确定性工作流。
 - 无 LLM 模式下也可完成本地检查、可视化、报告生成和大部分帮助功能。
 - 可在 Web UI 中配置 LLM：API key、API base URL 和模型切换。
 - 输出包括 Plotly 图表、HTML/Markdown 报告、`run_summary.json` 和 provenance 文件。
 
-## 快速开始：Windows 发行包
+## 快速开始：Windows 安装器
 
-大多数用户推荐下载第一个 Release 资源：
+大多数用户推荐从 GitHub Releases 下载 Windows 安装器：
 
 ```text
-X-Amplicon_main.zip
+X-Amplicon-Setup-v0.1.0.exe
 ```
 
 使用步骤：
 
-1. 解压 `X-Amplicon_main.zip`。
-2. 打开解压后的 `X-Amplicon_main` 文件夹。
-3. 双击：
+1. 双击 `X-Amplicon-Setup-v0.1.0.exe`。
+2. 按安装向导完成安装。默认的当前用户安装目录是：
 
 ```text
-Start_X-Amplicon_WebUI.cmd
+%LOCALAPPDATA%\Programs\X-Amplicon
 ```
 
-启动器会检查内置 Python 环境、确认小型 RDP 数据库可用，并打开本地 Web UI。默认地址是：
+3. 从开始菜单或桌面快捷方式启动 **X-Amplicon Web UI**。
+
+安装后的启动器会检查内置 Python 环境、确认小型 RDP 数据库可用，并打开本地 Web UI。默认地址是：
 
 ```text
 http://127.0.0.1:8765
@@ -42,9 +44,9 @@ http://127.0.0.1:8765
 
 如果浏览器没有自动打开，把启动窗口中显示的地址复制到浏览器即可。
 
-### 发行包包含什么
+### 安装器包含什么
 
-| 内容 | 发行包路径 |
+| 内容 | 安装后路径 |
 | --- | --- |
 | 内置 Python 运行时 | `.tools\python-3.13.13-amd64\python.exe` |
 | 小型 16S 数据库 | `database\rdp_16s_v18.fa` |
@@ -54,11 +56,11 @@ http://127.0.0.1:8765
 | 已构建 Web UI 前端 | `webui\frontend\dist\` |
 | 一键启动脚本 | `Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1` |
 
-发行包不包含用户 FASTQ 数据、分析输出、API key、本地运行状态、`node_modules` 或大型 SILVA 数据库。
+安装器不包含用户 FASTQ 数据、分析输出、API key、本地运行状态、`node_modules` 或大型 SILVA 数据库。
 
 ## 快速开始：源码仓库
 
-如果使用 GitHub 源码而不是 Release 包，先安装依赖：
+如果使用 GitHub 源码而不是 Windows 安装器，先安装依赖：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\setup_windows.ps1 -InstallWebUIDeps
@@ -83,6 +85,55 @@ powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -Port 8770
 powershell -ExecutionPolicy Bypass -File .\start_webui.ps1 -NoBrowser
 ```
 
+## 快速开始：Linux x86_64 服务器
+
+Linux 发行工作区面向 Ubuntu 22.04 x86_64 或兼容的 x86_64 Linux 服务器：
+
+```bash
+cd /path/to/X-Amplicon_linux_x86_64
+chmod +x setup_linux.sh start_webui.sh run_process.sh run_agent.sh
+./setup_linux.sh --china-mirror
+```
+
+检查外部工具和 pipeline 配置：
+
+```bash
+./bin/usearch --version
+./bin/vsearch --version
+./run_process.sh check-pipeline-config --params pipeline_params.linux.yaml
+```
+
+运行完整 CLI 流程：
+
+```bash
+./run_process.sh run-pipeline-config --params pipeline_params.linux.yaml
+./run_process.sh visualization-suite --final-dir work/06_final --format html
+./run_process.sh generate-report --final-dir work/06_final
+```
+
+Linux Web UI 需要在终端里启动，不要在 Jupyter 文件列表中直接点击 `.sh` 文件：
+
+```bash
+./start_webui.sh --no-browser
+```
+
+如果通过 SSH 访问服务器，在本地电脑执行端口转发：
+
+```bash
+ssh -N -L 8765:127.0.0.1:8765 user@server
+```
+
+然后打开 `http://127.0.0.1:8765`。
+
+如果要通过 SSH 查看离线 HTML 报告，建议在服务器上启动本地 HTTP 服务：
+
+```bash
+.venv/bin/python -m http.server 8899 --bind 127.0.0.1
+ssh -N -L 8899:127.0.0.1:8899 user@server
+```
+
+然后打开 `http://127.0.0.1:8899/work/06_final/report/analysis_report.html`。
+
 ## Web UI 使用流程
 
 推荐按以下顺序使用：
@@ -101,7 +152,7 @@ Web UI 不上传测序文件。数据、日志和结果都保留在本机。
 典型项目目录：
 
 ```text
-X-Amplicon_main\
+your_project\
   metadata.txt
   seq\
     S1_1.fq.gz
@@ -143,14 +194,16 @@ work\06_final
 | 输出 | 默认位置 |
 | --- | --- |
 | OTU/ASV 表 | `work\06_final\otutab.txt` |
-| 物种注释 | `work\06_final\taxonomy.txt` |
-| Alpha diversity | `work\06_final\alpha_diversity.txt` |
-| Beta diversity | `work\06_final\beta_diversity\` |
+| 物种注释 | `work\06_final\otus.sintax`、`work\06_final\taxonomy.tsv` |
+| Alpha diversity | `work\06_final\alpha\alpha_diversity.tsv` |
+| Beta diversity | `work\06_final\beta\` |
 | 可视化浏览入口 | `work\06_final\plots\index.html` |
 | 差异丰度分析 | `work\06_final\differential_abundance\` |
 | 分析报告 | `work\06_final\report\analysis_report.html` |
 | 可复现性记录 | `work\06_final\run_summary.json`、`provenance.json`、`provenance.md` |
 
+CLI 的 `run-pipeline-config` 会先生成核心分析结果。`plots/` 和 `report/`
+需要在 pipeline 完成后继续运行 `visualization-suite` 和 `generate-report`。
 图表会按类型放入不同子目录，而不是全部混放在一个文件夹。
 
 ## 可选 LLM Agent
@@ -207,9 +260,33 @@ python agent_cli.py --offline
 
 常用 slash commands 包括 `/params`、`/status`、`/tools`、`/language`、`/report`、`/config` 和 `/quit`。
 
+## Linux 打包方式
+
+Linux 没有完全等同于 Windows `.exe` 安装器的统一格式。常见选择如下：
+
+| 方式 | 适用场景 | 说明 |
+| --- | --- | --- |
+| 便携 `tar.gz` 包 | 推荐用于服务器和集群 | 分发整个项目目录，在目标机器运行 `setup_linux.sh`，再用 shell 启动脚本运行。 |
+| AppImage | 最接近桌面双击体验 | 可以生成单个 Linux 应用文件，但需要额外打包工作，并按发行版测试。 |
+| PyInstaller/Nuitka 可执行文件 | CLI 或启动器二进制 | 可以生成 Linux ELF 可执行文件，但 Web UI 静态资源、数据库、USEARCH/VSEARCH 仍需一起打包或放在旁边。 |
+| `.deb` 包 | Ubuntu 内部部署 | 适合由 IT 统一安装，但需要维护 Debian 包元数据和安装脚本。 |
+
+对当前项目，最稳妥的 Linux “类 exe”发布方式是便携目录压缩包：
+
+```bash
+cd ..
+tar --exclude='X-Amplicon_linux_x86_64/.venv' \
+    --exclude='X-Amplicon_linux_x86_64/work' \
+    --exclude='X-Amplicon_linux_x86_64/seq' \
+    --exclude='X-Amplicon_linux_x86_64/.env' \
+    -czf X-Amplicon_linux_x86_64.tar.gz X-Amplicon_linux_x86_64
+```
+
+用户解压后运行 `./setup_linux.sh`，再用 `./start_webui.sh --no-browser` 或 `./run_process.sh ...`。如果后续要做 PyInstaller/AppImage，请在与目标服务器兼容的 Linux 系统上构建，并先确认 USEARCH 等外部工具的再分发许可。
+
 ## 依赖
 
-Release 包已经包含普通使用所需运行环境。源码用户需要：
+Windows 安装器已经包含普通使用所需运行环境。源码用户需要：
 
 | 类别 | 包或工具 |
 | --- | --- |
@@ -233,7 +310,7 @@ powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -Port 8770
 ```
 
-如果 Release 包依赖检查失败，且电脑可以联网：
+如果安装后的依赖检查失败，且电脑可以联网，请在安装目录中打开 PowerShell 并运行：
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\Start_X-Amplicon_WebUI.ps1 -RepairDeps

@@ -7,7 +7,7 @@ vsearch_otu_defaults:
   minsize: 1
 
 vsearch_uchime_ref_defaults:
-  reference_db: database/rdp_16s_v18.fa
+  reference_db: databas/rdp_16s_v18.fa
   chimera_mode: ref
 
 vsearch_sintax_defaults:

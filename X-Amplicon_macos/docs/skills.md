@@ -18,6 +18,7 @@ startup and exposes them through `/tools`.
 | `agent_tracing` | JSONL tool-call tracing summaries and exports | No |
 | `agent_evaluation` | Static registry/prompt checks plus task/tool evaluation log summaries and exports | No |
 | `literature_evidence` | PubMed search and abstract retrieval through Biopython Entrez | Yes |
+| `webui_guidance` | Read-only Web UI layout, button, page, and workflow guidance for the browser Agent | No |
 
 ## Optional Dependencies
 

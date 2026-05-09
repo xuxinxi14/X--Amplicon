@@ -102,7 +102,13 @@ def update_project(project_id: str, patch: ProjectUpdate | dict[str, Any]) -> Pr
             next_projects.append(project)
             continue
         raw = project.model_dump(mode="json")
-        raw.update({key: value for key, value in patch_data.items() if value is not None})
+        raw.update(
+            {
+                key: value
+                for key, value in patch_data.items()
+                if value is not None or key == "last_preflight_job_id"
+            }
+        )
         if "project_dir" in raw:
             raw["project_dir"] = str(resolve_path(str(raw["project_dir"])))
         raw["updated_at"] = utc_now_iso()
@@ -112,3 +118,21 @@ def update_project(project_id: str, patch: ProjectUpdate | dict[str, Any]) -> Pr
         raise KeyError(f"Project not found: {project_id}")
     _save_projects(next_projects)
     return updated
+
+
+def delete_project(project_id: str) -> None:
+    """Remove one project record without deleting analysis outputs."""
+
+    projects = list_projects()
+    next_projects = [project for project in projects if project.id != project_id]
+    if len(next_projects) == len(projects):
+        raise KeyError(f"Project not found: {project_id}")
+    _save_projects(next_projects)
+
+
+def clear_projects() -> int:
+    """Remove all project records without deleting analysis outputs."""
+
+    count = len(list_projects())
+    _save_projects([])
+    return count

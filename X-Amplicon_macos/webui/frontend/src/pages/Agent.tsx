@@ -89,6 +89,36 @@ function messageId(): string {
   return `msg-${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function stripInlineMarkdown(value: string): string {
+  return value.replace(/\*\*(.*?)\*\*/g, '$1').replace(/`([^`]+)`/g, '$1');
+}
+
+function renderChatContent(content: string) {
+  const blocks = content.trim().split(/\n{2,}/).filter(Boolean);
+  return (
+    <div className="chat-markdown">
+      {blocks.map((block, index) => {
+        const lines = block.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+        if (lines.length && lines.every((line) => /^[-*]\s+/.test(line))) {
+          return (
+            <ul key={index}>
+              {lines.map((line, lineIndex) => <li key={`${index}-${lineIndex}`}>{stripInlineMarkdown(line.replace(/^[-*]\s+/, ''))}</li>)}
+            </ul>
+          );
+        }
+        if (lines.length && lines.every((line) => /^\d+\.\s+/.test(line))) {
+          return (
+            <ol key={index}>
+              {lines.map((line, lineIndex) => <li key={`${index}-${lineIndex}`}>{stripInlineMarkdown(line.replace(/^\d+\.\s+/, ''))}</li>)}
+            </ol>
+          );
+        }
+        return <p key={index}>{stripInlineMarkdown(lines.join('\n'))}</p>;
+      })}
+    </div>
+  );
+}
+
 export function Agent({ projects, locale, messages, onNavigate }: AgentProps) {
   const t = messages.agent.chat;
   const [status, setStatus] = useState<AgentStatusResponse | null>(null);
@@ -225,7 +255,7 @@ export function Agent({ projects, locale, messages, onNavigate }: AgentProps) {
             <strong>{isAssistant ? t.assistantName : t.userName}</strong>
             {message.mode ? <span>{message.mode === 'llm' ? messages.agent.llmMode : messages.agent.ruleMode}</span> : null}
           </div>
-          <p>{message.content}</p>
+          {renderChatContent(message.content)}
           {message.warnings?.length ? (
             <div className="chat-warning">
               {message.warnings.map((warning) => <span key={warning}>{warning}</span>)}

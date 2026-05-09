@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query
 
-from webui.backend.models.job import JobRecord
+from webui.backend.models.job import JobProgressResponse, JobRecord
 from webui.backend.services.job_manager import manager
+from webui.backend.services.job_progress import build_job_progress
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -21,6 +22,15 @@ def get_job(job_id: str) -> JobRecord:
         return manager.get_job(job_id)
     except KeyError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@router.get("/{job_id}/progress", response_model=JobProgressResponse)
+def get_job_progress(job_id: str) -> JobProgressResponse:
+    try:
+        job = manager.get_job(job_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return build_job_progress(job)
 
 
 @router.get("/{job_id}/logs")
