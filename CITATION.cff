@@ -8,7 +8,7 @@ authors:
     alias: "徐新玺"
 repository-code: "https://github.com/xuxinxi14/X--Amplicon"
 url: "https://github.com/xuxinxi14/X--Amplicon/releases/tag/v0.1.0"
-license: MIT
+license: GPL-3.0-only
 version: "0.1.0"
 date-released: "2026-04-29"
 abstract: "X-Amplicon is a local Python-first workflow with a browser Web UI for paired-end 16S rRNA amplicon analysis, generating OTU/ASV tables, taxonomy annotation, diversity analyses, interactive visualizations, reports, and provenance records."
