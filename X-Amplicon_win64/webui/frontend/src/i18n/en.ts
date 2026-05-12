@@ -17,6 +17,9 @@ export const en = {
   open: 'Open',
   refresh: 'Refresh',
   apiBase: 'API base',
+  appClose: {
+    activeJobWarning: 'An analysis job is still running. Closing this window will cancel the running job and stop the local backend.'
+  },
   nav: {
     dashboard: 'Dashboard',
     newAnalysis: 'New Analysis',

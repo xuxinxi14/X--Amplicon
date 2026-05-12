@@ -28,7 +28,9 @@ param(
     [switch]$Dev,
     [switch]$BuildFrontend,
     [switch]$NoBuild,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$ManagedApp,
+    [string]$SplashStatusFile = ""
 )
 
 Set-StrictMode -Version 2.0
@@ -40,9 +42,49 @@ $FrontendDir = Join-Path $ProjectRoot "webui\frontend"
 $FrontendDist = Join-Path $FrontendDir "dist"
 $StateDir = Join-Path $ProjectRoot ".xamplicon_webui"
 $BackendLog = Join-Path $StateDir "webui_backend.err.log"
+$BackendOutLog = Join-Path $StateDir "webui_backend.out.log"
 $FrontendLog = Join-Path $StateDir "webui_frontend.out.log"
+$BrowserProfile = Join-Path $StateDir "browser_profile"
 Set-Location -LiteralPath $ProjectRoot
-New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+
+function Set-SplashStatus {
+    param([string]$Message)
+    if (-not $SplashStatusFile) {
+        return
+    }
+    Set-Content -LiteralPath $SplashStatusFile -Value "STATUS|$Message" -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+function Stop-Splash {
+    if (-not $SplashStatusFile) {
+        return
+    }
+    Set-Content -LiteralPath $SplashStatusFile -Value "CLOSE" -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+trap {
+    Stop-Splash
+    throw $_
+}
+
+Set-SplashStatus "Preparing Web UI state..."
+try {
+    New-Item -ItemType Directory -Force -Path $StateDir | Out-Null
+}
+catch {
+    $message = "Web UI state directory cannot be created: $StateDir`nMove X-Amplicon to a writable folder or install it under your user directory."
+    if ($ManagedApp) {
+        Stop-Splash
+        try {
+            $shell = New-Object -ComObject WScript.Shell
+            [void]$shell.Popup($message, 0, "X-Amplicon Web UI", 16)
+        }
+        catch {
+        }
+        exit 1
+    }
+    throw $message
+}
 
 function Resolve-WebUIPython {
     $bundledPython = Join-Path $ProjectRoot ".tools\python-3.13.13-amd64\python.exe"
@@ -150,6 +192,168 @@ function Test-BackendImports {
     }
 }
 
+function Show-WebUIMessage {
+    param(
+        [string]$Message,
+        [int]$Icon = 48
+    )
+
+    try {
+        $shell = New-Object -ComObject WScript.Shell
+        [void]$shell.Popup($Message, 0, "X-Amplicon Web UI", $Icon)
+    }
+    catch {
+        Write-Host $Message
+    }
+}
+
+function Assert-StateDirWritable {
+    $probe = Join-Path $StateDir ".write_test"
+    try {
+        [System.IO.File]::WriteAllText($probe, "ok")
+        Remove-Item -LiteralPath $probe -Force -ErrorAction SilentlyContinue
+    }
+    catch {
+        $message = "Web UI state directory is not writable: $StateDir`nMove X-Amplicon to a writable folder or install it under your user directory."
+        if ($ManagedApp) {
+            Show-WebUIMessage $message 16
+            exit 1
+        }
+        throw $message
+    }
+}
+
+function Stop-ProcessTreeById {
+    param([int]$ProcessId)
+
+    if ($ProcessId -le 0) {
+        return
+    }
+    $taskkill = Join-Path $env:SystemRoot "System32\taskkill.exe"
+    if (Test-Path -LiteralPath $taskkill) {
+        & $taskkill /PID $ProcessId /T /F | Out-Null
+        return
+    }
+    Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
+function Wait-BackendHealth {
+    param(
+        [string]$HealthUrl,
+        [System.Diagnostics.Process]$Process
+    )
+
+    for ($attempt = 0; $attempt -lt 60; $attempt++) {
+        if ($Process.HasExited) {
+            throw "Web UI backend exited before it became ready. Check logs: $BackendLog"
+        }
+        try {
+            Invoke-RestMethod -Uri $HealthUrl -TimeoutSec 2 | Out-Null
+            return
+        }
+        catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+    throw "Web UI backend did not become ready within 60 seconds. Check logs: $BackendLog"
+}
+
+function Resolve-AppBrowser {
+    $candidates = @()
+    $edge = Get-Command "msedge.exe" -ErrorAction SilentlyContinue
+    if ($edge) {
+        $candidates += [string]$edge.Source
+    }
+    $chrome = Get-Command "chrome.exe" -ErrorAction SilentlyContinue
+    if ($chrome) {
+        $candidates += [string]$chrome.Source
+    }
+    $candidates += @(
+        (Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path $env:ProgramFiles "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path $env:LocalAppData "Microsoft\Edge\Application\msedge.exe"),
+        (Join-Path $env:ProgramFiles "Google\Chrome\Application\chrome.exe"),
+        (Join-Path ${env:ProgramFiles(x86)} "Google\Chrome\Application\chrome.exe"),
+        (Join-Path $env:LocalAppData "Google\Chrome\Application\chrome.exe")
+    )
+    foreach ($candidate in $candidates) {
+        if ($candidate -and (Test-Path -LiteralPath $candidate)) {
+            return $candidate
+        }
+    }
+    return ""
+}
+
+function Stop-ActiveJobs {
+    param([string]$ApiBase)
+
+    try {
+        $jobs = Invoke-RestMethod -Uri "$ApiBase/jobs?limit=200" -TimeoutSec 5
+        foreach ($job in @($jobs)) {
+            if (@("queued", "checking", "running") -contains [string]$job.status) {
+                Invoke-RestMethod -Method Post -Uri "$ApiBase/jobs/$($job.id)/cancel" -TimeoutSec 5 | Out-Null
+            }
+        }
+    }
+    catch {
+    }
+}
+
+function Start-ManagedProduction {
+    param(
+        [string]$PythonExe,
+        [string]$BindHost,
+        [int]$Port,
+        [string]$Url
+    )
+
+    Set-SplashStatus "Starting local backend..."
+    $backendProcess = Start-Process -FilePath $PythonExe -ArgumentList @(
+        "-m", "uvicorn", "webui.backend.app:app", "--host", $BindHost, "--port", "$Port"
+    ) -WorkingDirectory $ProjectRoot -WindowStyle Hidden -PassThru -RedirectStandardError $BackendLog -RedirectStandardOutput $BackendOutLog
+
+    try {
+        Set-SplashStatus "Waiting for backend to become ready..."
+        Wait-BackendHealth -HealthUrl "$Url/api/health" -Process $backendProcess
+        Set-SplashStatus "Opening Web UI..."
+        Stop-Splash
+        if ($NoBrowser) {
+            Wait-Process -Id $backendProcess.Id
+            return
+        }
+
+        $browser = Resolve-AppBrowser
+        if (-not $browser) {
+            Start-Process $Url
+            Show-WebUIMessage "Web UI is running at $Url.`nNo Edge/Chrome app window was found, so the backend will keep running until stopped manually.`nLogs: $BackendLog" 48
+            Wait-Process -Id $backendProcess.Id
+            return
+        }
+
+        New-Item -ItemType Directory -Force -Path $BrowserProfile | Out-Null
+        $browserProcess = Start-Process -FilePath $browser -ArgumentList @(
+            "--app=$Url",
+            "--user-data-dir=$BrowserProfile",
+            "--no-first-run"
+        ) -PassThru
+        Wait-Process -Id $browserProcess.Id
+    }
+    catch {
+        Stop-Splash
+        Show-WebUIMessage "$($_.Exception.Message)`n`nLogs:`n$BackendLog`n$BackendOutLog" 16
+        throw
+    }
+    finally {
+        Stop-ActiveJobs -ApiBase "$Url/api"
+        if ($backendProcess -and -not $backendProcess.HasExited) {
+            Stop-ProcessTreeById -ProcessId $backendProcess.Id
+        }
+    }
+}
+
+Assert-StateDirWritable
+
+Set-SplashStatus "Checking Python dependencies..."
 $PythonExe = Resolve-WebUIPython
 Write-Host "X-Amplicon Web UI launcher" -ForegroundColor Cyan
 Write-Host "Project root: $ProjectRoot"
@@ -198,6 +402,7 @@ if ($Dev) {
 }
 
 if (($BuildFrontend -or -not (Test-FrontendBuilt)) -and -not $NoBuild) {
+    Set-SplashStatus "Preparing frontend build..."
     Invoke-FrontendBuild
 }
 
@@ -214,11 +419,17 @@ if (-not (Test-FrontendBuilt)) {
 
 $ResolvedPort = Resolve-AvailablePort -Address $BindHost -StartPort $Port
 $Url = "http://$BindHost`:$ResolvedPort"
+Set-SplashStatus "Starting Web UI on $Url..."
 
 Write-Host ""
 Write-Host "Starting local Web UI: $Url" -ForegroundColor Green
 Write-Host "Serving frontend build from: $FrontendDist"
 Write-Host "Press Ctrl+C in this window to stop the server."
+
+if ($ManagedApp) {
+    Start-ManagedProduction -PythonExe $PythonExe -BindHost $BindHost -Port $ResolvedPort -Url $Url
+    exit 0
+}
 
 if (-not $NoBrowser) {
     Start-Process $Url

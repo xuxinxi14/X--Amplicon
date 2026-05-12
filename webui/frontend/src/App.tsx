@@ -20,6 +20,10 @@ const emptyDashboardData: DashboardData = {
   projects: []
 };
 
+function hasActiveJob(jobs: Awaited<ReturnType<typeof api.listJobs>>): boolean {
+  return jobs.some((job) => ['queued', 'checking', 'running'].includes(job.status));
+}
+
 function pageTitle(page: PageId, messages: ReturnType<typeof getMessages>): string {
   const labels: Record<PageId, string> = {
     dashboard: messages.nav.dashboard,
@@ -42,6 +46,7 @@ export default function App() {
   const [dashboardData, setDashboardData] = useState<DashboardData>(emptyDashboardData);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeJobs, setActiveJobs] = useState(false);
 
   const messages = useMemo(() => getMessages(locale), [locale]);
 
@@ -73,6 +78,43 @@ export default function App() {
     document.documentElement.lang = locale === 'Chinese' ? 'zh-CN' : 'en';
     document.body.dataset.locale = locale;
   }, [locale]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshActiveJobs() {
+      try {
+        const jobs = await api.listJobs(50);
+        if (!cancelled) {
+          setActiveJobs(hasActiveJob(jobs));
+        }
+      } catch {
+        if (!cancelled) {
+          setActiveJobs(false);
+        }
+      }
+    }
+
+    void refreshActiveJobs();
+    const interval = window.setInterval(refreshActiveJobs, 5000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!activeJobs) {
+      return;
+    }
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = messages.appClose.activeJobWarning;
+      return messages.appClose.activeJobWarning;
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [activeJobs, messages]);
 
   async function handleLocaleChange(nextLocale: Locale) {
     setLocale(nextLocale);

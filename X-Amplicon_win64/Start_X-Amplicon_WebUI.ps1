@@ -14,6 +14,7 @@
 param(
     [int]$Port = 8765,
     [switch]$NoBrowser,
+    [switch]$ManagedApp,
     [switch]$RepairDeps,
     [switch]$UseChinaMirror
 )
@@ -31,11 +32,14 @@ $EnvExample = Join-Path $Root ".env.example"
 $RdpDb = Join-Path $Root "database\rdp_16s_v18.fa"
 $FrontendIndex = Join-Path $Root "webui\frontend\dist\index.html"
 $Launcher = Join-Path $Root "start_webui.ps1"
+$SplashScript = Join-Path $Root "Start_X-Amplicon_Splash.ps1"
+$SplashStatusFile = ""
 
 function Write-Step {
     param([string]$Message)
     Write-Host ""
     Write-Host "==> $Message" -ForegroundColor Cyan
+    Set-SplashStatus $Message
 }
 
 function Write-Ok {
@@ -43,14 +47,73 @@ function Write-Ok {
     Write-Host "OK  $Message" -ForegroundColor Green
 }
 
+function Start-Splash {
+    if (-not $ManagedApp) {
+        return
+    }
+    if (-not (Test-Path -LiteralPath $SplashScript)) {
+        return
+    }
+    try {
+        $splashDir = Join-Path ([System.IO.Path]::GetTempPath()) "X-Amplicon"
+        New-Item -ItemType Directory -Force -Path $splashDir | Out-Null
+        $script:SplashStatusFile = Join-Path $splashDir ("splash_" + [System.Guid]::NewGuid().ToString("N") + ".txt")
+        Set-Content -LiteralPath $script:SplashStatusFile -Value "STATUS|Starting X-Amplicon Web UI..." -Encoding UTF8
+        $args = @(
+            "-NoProfile",
+            "-STA",
+            "-ExecutionPolicy", "Bypass",
+            "-File", "`"$SplashScript`"",
+            "-StatusFile", "`"$script:SplashStatusFile`""
+        )
+        Start-Process -FilePath "powershell.exe" -ArgumentList $args | Out-Null
+    }
+    catch {
+        $script:SplashStatusFile = ""
+    }
+}
+
+function Set-SplashStatus {
+    param([string]$Message)
+    if (-not $script:SplashStatusFile) {
+        return
+    }
+    Set-Content -LiteralPath $script:SplashStatusFile -Value "STATUS|$Message" -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+function Stop-Splash {
+    if (-not $script:SplashStatusFile) {
+        return
+    }
+    Set-Content -LiteralPath $script:SplashStatusFile -Value "CLOSE" -Encoding UTF8 -ErrorAction SilentlyContinue
+}
+
+trap {
+    Stop-Splash
+    throw $_
+}
+
 function Stop-Release {
     param([string]$Message)
+    if ($ManagedApp) {
+        Stop-Splash
+        try {
+            $shell = New-Object -ComObject WScript.Shell
+            [void]$shell.Popup($Message, 0, "X-Amplicon Web UI", 16)
+        }
+        catch {
+        }
+        exit 1
+    }
     Write-Host ""
     Write-Host "ERROR: $Message" -ForegroundColor Red
     Write-Host "Keep this window open and read the message above. Press Enter to exit."
     [void][System.Console]::ReadLine()
     exit 1
 }
+
+Start-Splash
+Set-SplashStatus "Checking release package..."
 
 Write-Host "X-Amplicon local Web UI release launcher" -ForegroundColor Cyan
 Write-Host "Package root: $Root"
@@ -64,18 +127,22 @@ if (-not (Test-Path -LiteralPath $PythonExe)) {
 if (-not (Test-Path -LiteralPath $PythonExe)) {
     Stop-Release "Bundled Python was not found: $PythonExe"
 }
+Set-SplashStatus "Bundled Python found"
 Write-Ok "Bundled Python found"
 
 if (-not (Test-Path -LiteralPath $EnvFile) -and (Test-Path -LiteralPath $EnvExample)) {
+    Set-SplashStatus "Preparing local configuration..."
     Copy-Item -LiteralPath $EnvExample -Destination $EnvFile -Force
     Write-Ok "Created local .env from .env.example"
 }
 
+Set-SplashStatus "Checking bundled database..."
 if (-not (Test-Path -LiteralPath $RdpDb)) {
     Stop-Release "Small RDP database was not found: $RdpDb"
 }
 Write-Ok "Small RDP database found"
 
+Set-SplashStatus "Checking Web UI files..."
 if (-not (Test-Path -LiteralPath $FrontendIndex)) {
     Stop-Release "Prebuilt Web UI frontend was not found: $FrontendIndex"
 }
@@ -131,5 +198,15 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Step "Starting Web UI"
 Write-Host "The browser URL will be printed below. Default: http://127.0.0.1:$Port"
-& $Launcher -Port $Port -NoBuild -NoBrowser:$NoBrowser
-exit $LASTEXITCODE
+try {
+    & $Launcher -Port $Port -NoBuild -NoBrowser:$NoBrowser -ManagedApp:$ManagedApp -SplashStatusFile $SplashStatusFile
+    $exitCode = $LASTEXITCODE
+}
+catch {
+    Stop-Splash
+    throw
+}
+if ($exitCode -ne 0) {
+    Stop-Splash
+}
+exit $exitCode

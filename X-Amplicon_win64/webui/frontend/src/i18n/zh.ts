@@ -17,6 +17,9 @@ export const zh = {
   open: '打开',
   refresh: '刷新',
   apiBase: 'API 地址',
+  appClose: {
+    activeJobWarning: '仍有分析任务正在运行。关闭此窗口将取消正在运行的任务并停止本地后端。'
+  },
   nav: {
     dashboard: '工作台',
     newAnalysis: '新建分析',

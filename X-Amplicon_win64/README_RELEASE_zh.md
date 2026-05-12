@@ -10,7 +10,7 @@
 - 已构建前端：`webui\frontend\dist\`
 - 小型 RDP 16S 数据库：`database\rdp_16s_v18.fa`
 - Windows USEARCH/VSEARCH：`bin\windows\`
-- 一键启动脚本：`Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1`
+- 一键启动脚本：`Start_X-Amplicon_WebUI.vbs`、`Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1`
 
 以下内容不会放入发行包：
 
@@ -24,6 +24,14 @@
 ## 启动方式
 
 普通 Windows 用户推荐双击：
+
+```text
+Start_X-Amplicon_WebUI.vbs
+```
+
+该入口不会显示终端窗口；启动期间会显示一个小型过场窗口，后端准备好后自动关闭；关闭 Web UI 应用窗口时，本地后端也会同步关闭。
+
+如果需要排查启动问题，可以使用可见终端入口：
 
 ```text
 Start_X-Amplicon_WebUI.cmd

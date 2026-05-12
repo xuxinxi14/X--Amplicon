@@ -15,7 +15,9 @@ param(
     [switch]$Dev,
     [switch]$BuildFrontend,
     [switch]$NoBuild,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$ManagedApp,
+    [string]$SplashStatusFile = ""
 )
 
 $ProjectRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -33,5 +35,7 @@ if (-not (Test-Path -LiteralPath $Launcher)) {
     -Dev:$Dev `
     -BuildFrontend:$BuildFrontend `
     -NoBuild:$NoBuild `
-    -NoBrowser:$NoBrowser
+    -NoBrowser:$NoBrowser `
+    -ManagedApp:$ManagedApp `
+    -SplashStatusFile $SplashStatusFile
 exit $LASTEXITCODE

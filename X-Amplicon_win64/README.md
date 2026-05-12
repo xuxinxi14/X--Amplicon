@@ -36,13 +36,15 @@ Then:
 
 3. Launch **X-Amplicon Web UI** from the Start Menu or desktop shortcut.
 
+The normal shortcut starts X-Amplicon without showing a terminal window. A small startup window shows progress until the backend is ready, then the Web UI opens. Closing the Web UI app window also stops the local backend. The visible `Start_X-Amplicon_WebUI.cmd` launcher is still included for troubleshooting.
+
 The installed launcher checks the bundled Python environment, verifies the small RDP database, and opens the local Web UI. The default address is:
 
 ```text
 http://127.0.0.1:8765
 ```
 
-If the browser does not open automatically, copy the printed address into your browser.
+If the hidden launcher fails, run `Start_X-Amplicon_WebUI.cmd` from the installation folder to see startup messages.
 
 ### What The Installer Includes
 
@@ -54,7 +56,7 @@ If the browser does not open automatically, copy the printed address into your b
 | X-Amplicon core workflow | `process.py`, `src\`, `agent\` |
 | Web UI backend | `webui\backend\` |
 | Prebuilt Web UI frontend | `webui\frontend\dist\` |
-| One-click launchers | `Start_X-Amplicon_WebUI.cmd`, `Start_X-Amplicon_WebUI.ps1` |
+| One-click launchers | `Start_X-Amplicon_WebUI.vbs`, `Start_X-Amplicon_WebUI.cmd`, `Start_X-Amplicon_WebUI.ps1` |
 
 The installer does not include user FASTQ data, analysis outputs, API keys, runtime state, `node_modules`, or large SILVA databases.
 

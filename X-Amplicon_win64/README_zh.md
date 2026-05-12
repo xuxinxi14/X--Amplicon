@@ -36,13 +36,15 @@ X-Amplicon-Setup-v0.1.0.exe
 
 3. 从开始菜单或桌面快捷方式启动 **X-Amplicon Web UI**。
 
+普通快捷方式会在不显示终端窗口的情况下启动 X-Amplicon。启动期间会显示一个小型过场窗口，后端准备好后自动关闭并打开 Web UI。关闭 Web UI 应用窗口时，本地后端也会同步关闭；可见的 `Start_X-Amplicon_WebUI.cmd` 仍保留用于排查启动问题。
+
 安装后的启动器会检查内置 Python 环境、确认小型 RDP 数据库可用，并打开本地 Web UI。默认地址是：
 
 ```text
 http://127.0.0.1:8765
 ```
 
-如果浏览器没有自动打开，把启动窗口中显示的地址复制到浏览器即可。
+如果隐藏启动入口失败，请在安装目录中运行 `Start_X-Amplicon_WebUI.cmd` 查看启动信息。
 
 ### 安装器包含什么
 
@@ -54,7 +56,7 @@ http://127.0.0.1:8765
 | X-Amplicon 核心流程 | `process.py`、`src\`、`agent\` |
 | Web UI 后端 | `webui\backend\` |
 | 已构建 Web UI 前端 | `webui\frontend\dist\` |
-| 一键启动脚本 | `Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1` |
+| 一键启动脚本 | `Start_X-Amplicon_WebUI.vbs`、`Start_X-Amplicon_WebUI.cmd`、`Start_X-Amplicon_WebUI.ps1` |
 
 安装器不包含用户 FASTQ 数据、分析输出、API key、本地运行状态、`node_modules` 或大型 SILVA 数据库。
 

@@ -10,7 +10,7 @@ This folder is the minimal local package for running X-Amplicon Web UI on Window
 - Prebuilt React frontend: `webui\frontend\dist\`
 - Small RDP 16S database: `database\rdp_16s_v18.fa`
 - Windows USEARCH/VSEARCH executables: `bin\windows\`
-- One-click startup scripts: `Start_X-Amplicon_WebUI.cmd` and `Start_X-Amplicon_WebUI.ps1`
+- One-click startup scripts: `Start_X-Amplicon_WebUI.vbs`, `Start_X-Amplicon_WebUI.cmd`, and `Start_X-Amplicon_WebUI.ps1`
 
 Large user data and generated outputs are not included:
 
@@ -24,6 +24,14 @@ Large user data and generated outputs are not included:
 ## Start
 
 Recommended for ordinary Windows users:
+
+```text
+Double-click Start_X-Amplicon_WebUI.vbs
+```
+
+This opens the Web UI without a terminal window. A small startup window shows progress until the backend is ready. Closing the Web UI app window also stops the local backend.
+
+For troubleshooting, use the visible console launcher:
 
 ```text
 Double-click Start_X-Amplicon_WebUI.cmd
