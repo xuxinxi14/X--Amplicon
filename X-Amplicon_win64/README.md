@@ -22,12 +22,12 @@ The recommended way to use X-Amplicon is the local browser Web UI. It keeps sequ
 For most users, download the Windows installer from GitHub Releases:
 
 ```text
-X-Amplicon-Setup-v0.1.0.exe
+X-Amplicon-Setup-v0.1.2.exe
 ```
 
 Then:
 
-1. Double-click `X-Amplicon-Setup-v0.1.0.exe`.
+1. Double-click `X-Amplicon-Setup-v0.1.2.exe`.
 2. Follow the installer wizard. The default per-user install path is:
 
 ```text

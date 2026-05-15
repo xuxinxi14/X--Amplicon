@@ -13,7 +13,7 @@ Install Inno Setup 6, then run from the repository root:
 The installer is written to:
 
 ```text
-dist\installer\X-Amplicon-Setup-v0.1.0.exe
+dist\installer\X-Amplicon-Setup-v0.1.2.exe
 ```
 
 The installer uses a per-user writable install path:

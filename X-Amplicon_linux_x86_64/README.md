@@ -26,12 +26,12 @@ X-Amplicon is a Windows-first local Agent and Web UI for 16S rRNA amplicon analy
 The easiest way to get started is to download the Windows installer directly from GitHub Releases:
 
 ```text
-X-Amplicon-Setup-v0.1.0.exe
+X-Amplicon-Setup-v0.1.2.exe
 ```
 
 Then:
 
-1. Double-click `X-Amplicon-Setup-v0.1.0.exe` to launch the setup wizard.
+1. Double-click `X-Amplicon-Setup-v0.1.2.exe` to launch the setup wizard.
 2. Follow the prompts. The default per-user install path is:
 
 ```text

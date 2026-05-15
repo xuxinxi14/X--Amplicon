@@ -73,3 +73,16 @@ desktop.ini
 
 # Local notes
 启动命令.txt
+# Local cleanup/archive and generated release artifacts
+_archive/
+work*/
+work_broke/
+metadata*.txt
+seq.zip
+*.mp4
+X-Amplicon_*.zip
+X-Amplicon_*release*.tar.gz
+X-Amplicon_manuscript_draft*.md
+iMeta - *.docx
+database/silva_*.fa
+图标/

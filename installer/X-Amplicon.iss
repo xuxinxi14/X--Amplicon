@@ -1,5 +1,5 @@
 #define MyAppName "X-Amplicon"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.2"
 #define MyAppPublisher "X-Amplicon"
 #define MyAppURL "https://github.com/xuxinxi14/X--Amplicon"
 #define MyAppExe "Start_X-Amplicon_WebUI.vbs"
@@ -21,7 +21,7 @@ DisableProgramGroupPage=yes
 LicenseFile=..\LICENSE
 InfoBeforeFile=..\X-Amplicon_win64\README_RELEASE_zh.md
 OutputDir=..\dist\installer
-OutputBaseFilename=X-Amplicon-Setup-v0.1.0
+OutputBaseFilename=X-Amplicon-Setup-v0.1.2
 SetupIconFile={#MyAppIcon}
 SetupLogging=yes
 Compression=none

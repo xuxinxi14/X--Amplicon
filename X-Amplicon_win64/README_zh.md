@@ -22,12 +22,12 @@ X-Amplicon 是一个以 Windows 本地环境为主的 16S rRNA 扩增子分析 A
 大多数用户推荐从 GitHub Releases 下载 Windows 安装器：
 
 ```text
-X-Amplicon-Setup-v0.1.0.exe
+X-Amplicon-Setup-v0.1.2.exe
 ```
 
 使用步骤：
 
-1. 双击 `X-Amplicon-Setup-v0.1.0.exe`。
+1. 双击 `X-Amplicon-Setup-v0.1.2.exe`。
 2. 按安装向导完成安装。默认的当前用户安装目录是：
 
 ```text
